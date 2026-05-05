@@ -12,6 +12,7 @@ const DB = {
 
   supabase: null,
   remoteReady: false,
+  remoteError: '',
   user: null,
 
   async init() {
@@ -37,16 +38,19 @@ const DB = {
   _initSupabase() {
     const cfg = window.SUPABASE_CONFIG;
     if (!cfg?.url || !cfg?.anonKey || cfg.url.includes('seu-project-ref') || cfg.anonKey.includes('sua-chave')) {
-      console.warn('Supabase não configurado. Usando apenas armazenamento local.');
+      this.remoteError = 'Supabase não está configurado. Configure URL e chave anon public antes de usar o sistema.';
+      console.warn(this.remoteError);
       return;
     }
     if (!window.supabase?.createClient) {
-      console.warn('Biblioteca Supabase não carregada. Usando apenas armazenamento local.');
+      this.remoteError = 'Biblioteca do Supabase não carregou. Verifique a conexão com o CDN no deploy.';
+      console.warn(this.remoteError);
       return;
     }
 
     this.supabase = window.supabase.createClient(cfg.url, cfg.anonKey);
     this.remoteReady = true;
+    this.remoteError = '';
   },
 
   _get(key) {

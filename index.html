@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Sistema interno de controle de estoque para equipe de manutenção — gerencie materiais, retiradas e cadastros com facilidade.">
   <title>StockManager — Controle de Estoque</title>
-  <link rel="stylesheet" href="css/style.css?v=20260503-7">
+  <link rel="stylesheet" href="css/style.css?v=20260505-1">
 </head>
 <body class="auth-active">
   <section id="auth-screen" class="auth-screen">
@@ -89,14 +89,21 @@
 
   <!-- SCRIPTS (ordem importa) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.config.js?v=20260503-7"></script>
-  <script src="js/storage.js?v=20260503-7"></script>
-  <script src="js/dashboard.js?v=20260503-7"></script>
-  <script src="js/produtos.js?v=20260503-7"></script>
-  <script src="js/movimentacoes.js?v=20260503-7"></script>
-  <script src="js/pessoas.js?v=20260503-7"></script>
-  <script src="js/relatorios.js?v=20260503-7"></script>
-  <script src="js/app.js?v=20260503-7"></script>
+  <script>
+    window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || {
+      url: 'https://upkainwgfmxdyflivyhk.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa2FpbndnZm14ZHlmbGl2eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjMzNDksImV4cCI6MjA5MzM5OTM0OX0.cqNho307eYTI0hWVhV33Vk69USBsyQnG-dyMJF3y9v8',
+      allowSignUp: false,
+    };
+  </script>
+  <script src="js/supabase.config.js?v=20260505-1"></script>
+  <script src="js/storage.js?v=20260505-1"></script>
+  <script src="js/dashboard.js?v=20260505-1"></script>
+  <script src="js/produtos.js?v=20260505-1"></script>
+  <script src="js/movimentacoes.js?v=20260505-1"></script>
+  <script src="js/pessoas.js?v=20260505-1"></script>
+  <script src="js/relatorios.js?v=20260505-1"></script>
+  <script src="js/app.js?v=20260505-1"></script>
 
 </body>
 </html>

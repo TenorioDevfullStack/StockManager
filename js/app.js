@@ -19,7 +19,7 @@ const App = {
     this.bindAuthActions();
 
     if (!DB.remoteReady) {
-      this.showAuthMessage('Supabase não está configurado. Configure o acesso antes de usar o sistema.', 'error');
+      this.showAuthMessage(DB.remoteError || 'Supabase não está configurado. Configure o acesso antes de usar o sistema.', 'error');
       return;
     }
 
@@ -76,7 +76,7 @@ const App = {
 
   async signIn() {
     if (!DB.supabase) {
-      this.showAuthMessage('Supabase não está configurado.', 'error');
+      this.showAuthMessage(DB.remoteError || 'Supabase não está configurado.', 'error');
       return;
     }
     const email = document.getElementById('auth-email').value.trim();
@@ -93,7 +93,7 @@ const App = {
 
   async signUp() {
     if (!DB.supabase) {
-      this.showAuthMessage('Supabase não está configurado.', 'error');
+      this.showAuthMessage(DB.remoteError || 'Supabase não está configurado.', 'error');
       return;
     }
     const email = document.getElementById('auth-email').value.trim();
