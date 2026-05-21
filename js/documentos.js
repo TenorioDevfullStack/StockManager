@@ -220,10 +220,10 @@ const Documentos = {
           <div class="form-group">
             <label>Arquivo PDF*</label>
             <div class="file-input-wrapper">
-              <input type="file" id="doc-arquivo" accept=".pdf" required class="file-input" onchange="Documentos.previewArquivo(this)">
-              <div class="file-input-label">
+              <input type="file" id="doc-arquivo" accept="application/pdf,.pdf" required class="file-input" onchange="Documentos.previewArquivo(this)">
+              <label for="doc-arquivo" class="file-input-label">
                 <span id="file-name">Clique para selecionar um PDF</span>
-              </div>
+              </label>
             </div>
             <small>Máximo: 50MB</small>
           </div>
@@ -252,13 +252,18 @@ const Documentos = {
   async enviarPDF(event) {
     event.preventDefault();
 
+    if (!DB.remoteReady || !DB.user?.id) {
+      UI.toast("Faça login para enviar documentos ao Supabase.", "error");
+      return;
+    }
+
     const nome = document.getElementById("doc-nome").value.trim();
     const descricao = document.getElementById("doc-descricao").value.trim();
     const tipo = document.getElementById("doc-tipo").value;
     const arquivo = document.getElementById("doc-arquivo").files[0];
     const tagsStr = document.getElementById("doc-tags").value;
 
-    if (!arquivo || !arquivo.type.includes("pdf")) {
+    if (!this.ehPDF(arquivo)) {
       UI.toast("Por favor, selecione um arquivo PDF válido", "error");
       return;
     }
@@ -268,18 +273,24 @@ const Documentos = {
       return;
     }
 
+    const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
     const loading = UI.toast("Enviando arquivo...", "loading");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Enviando...";
+    }
 
     try {
       // Gerar caminho único para o arquivo
       const timestamp = Date.now();
-      const caminhoArquivo = `${DB.user.id}/${tipo}/${timestamp}_${nome.replace(/\s+/g, "_")}.pdf`;
+      const caminhoArquivo = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
       // Fazer upload para Supabase Storage
       const { error: uploadError } = await DB.supabase.storage
         .from("documentos")
         .upload(caminhoArquivo, arquivo, {
           cacheControl: "3600",
+          contentType: "application/pdf",
           upsert: false,
         });
 
@@ -291,6 +302,9 @@ const Documentos = {
         .getPublicUrl(caminhoArquivo);
 
       const arquivoUrl = urlData?.publicUrl;
+      if (!arquivoUrl) {
+        throw new Error("Não foi possível gerar a URL pública do arquivo.");
+      }
 
       // Salvar metadados no banco de dados
       const tags = tagsStr
@@ -310,7 +324,10 @@ const Documentos = {
         },
       ]);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        await DB.supabase.storage.from("documentos").remove([caminhoArquivo]);
+        throw dbError;
+      }
 
       UI.closeModal();
       UI.closeToast(loading);
@@ -320,7 +337,30 @@ const Documentos = {
       console.error("Erro ao enviar PDF:", error);
       UI.closeToast(loading);
       UI.toast("Erro ao enviar PDF: " + error.message, "error");
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Enviar PDF";
+      }
     }
+  },
+
+  ehPDF(arquivo) {
+    if (!arquivo) return false;
+    const tipo = String(arquivo.type || "").toLowerCase();
+    const nome = String(arquivo.name || "").toLowerCase();
+    return tipo === "application/pdf" || nome.endsWith(".pdf");
+  },
+
+  slugArquivo(nome) {
+    const slug = String(nome || "documento")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80);
+    return slug || "documento";
   },
 
   async visualizar(docId) {

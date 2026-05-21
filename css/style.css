@@ -1493,8 +1493,9 @@ textarea.form-input {
 .file-input {
   position: absolute;
   opacity: 0;
-  width: 0;
-  height: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 .file-input-label {
   display: flex;

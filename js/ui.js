@@ -38,13 +38,20 @@ const UI = {
   },
 
   // ---- Modal ----
-  openModal(title, bodyHTML, showCancel = true) {
+  openModal(title, bodyHTML, showFooter = true) {
     const overlay = document.getElementById("modal-overlay");
+    const footer = document.getElementById("modal-footer");
+    const cancelBtn = document.getElementById("modal-cancel");
+    const confirmBtn = document.getElementById("modal-confirm");
+
     document.getElementById("modal-title").textContent = title;
     document.getElementById("modal-body").innerHTML = bodyHTML;
-    document.getElementById("modal-cancel").style.display = showCancel
-      ? ""
-      : "none";
+    footer.style.display = showFooter ? "" : "none";
+    cancelBtn.style.display = "";
+    confirmBtn.style.display = "";
+    confirmBtn.textContent = "Salvar";
+    confirmBtn.className = "btn btn-primary";
+    confirmBtn.onclick = null;
     overlay.classList.add("active");
 
     const firstInput = document.querySelector(
@@ -55,6 +62,7 @@ const UI = {
 
   closeModal() {
     document.getElementById("modal-overlay").classList.remove("active");
+    document.getElementById("modal-footer").style.display = "";
   },
 
   // ---- Helpers ----

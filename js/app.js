@@ -279,6 +279,7 @@ const App = {
     const overlay = document.getElementById("modal-overlay");
     document.getElementById("modal-title").textContent = title;
     document.getElementById("modal-body").innerHTML = bodyHTML;
+    document.getElementById("modal-footer").style.display = "";
     const confirmBtn = document.getElementById("modal-confirm");
     document.getElementById("modal-cancel").style.display = "";
     confirmBtn.textContent = confirmLabel;
@@ -297,6 +298,7 @@ const App = {
 
   closeModal() {
     document.getElementById("modal-overlay").classList.remove("active");
+    document.getElementById("modal-footer").style.display = "";
     document.getElementById("modal-cancel").style.display = "";
   },
 

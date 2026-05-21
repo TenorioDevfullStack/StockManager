@@ -17,7 +17,9 @@ Foi implementado um sistema completo de gerenciamento de arquivos PDF no StockMa
 
 ### 1. Configurar Supabase Storage
 
-Você precisa criar um **bucket** no Supabase para armazenar os PDFs:
+O projeto inclui a migration `supabase/migrations/20260521001000_create_documents_storage_bucket.sql`, que cria o bucket `documentos` e as políticas de upload, leitura e remoção no Supabase Storage.
+
+Se preferir configurar manualmente pelo Dashboard, use os passos abaixo:
 
 #### Passo 1: Acessar o Dashboard do Supabase
 
@@ -59,10 +61,11 @@ using (bucket_id = 'documentos' and (storage.foldername(name))[1] = auth.uid()::
 
 ### 2. Executar Migração SQL
 
-Execute a migração SQL para criar a tabela de documentos:
+Execute as migrações SQL para criar a tabela de documentos e configurar o Storage:
 
 ```sql
 -- Arquivo: supabase/migrations/20260521000000_add_documents_table.sql
+-- Arquivo: supabase/migrations/20260521001000_create_documents_storage_bucket.sql
 ```
 
 Você pode executar isso:
@@ -76,7 +79,8 @@ Você pode executar isso:
 
 - `js/documentos.js` - Módulo de gerenciamento de PDFs
 - `js/ui.js` - Helpers de interface de usuário
-- `supabase/migrations/20260521000000_add_documents_table.sql` - Migração SQL
+- `supabase/migrations/20260521000000_add_documents_table.sql` - Tabela de documentos
+- `supabase/migrations/20260521001000_create_documents_storage_bucket.sql` - Bucket e políticas de Storage
 
 ### Modificados
 
