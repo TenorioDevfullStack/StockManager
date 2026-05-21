@@ -56,19 +56,44 @@ const DB = {
   },
 
   _get(key) {
+    const storageKey = this._storageKey(key);
     try {
-      return JSON.parse(sessionStorage.getItem(this._storageKey(key))) || [];
+      let raw = null;
+      try {
+        raw = localStorage.getItem(storageKey);
+      } catch {}
+      if (raw === null) {
+        raw = sessionStorage.getItem(storageKey);
+        if (raw !== null) {
+          try {
+            localStorage.setItem(storageKey, raw);
+          } catch {}
+        }
+      }
+      return JSON.parse(raw) || [];
     } catch {
       return [];
     }
   },
 
   _set(key, value) {
-    sessionStorage.setItem(this._storageKey(key), JSON.stringify(value));
+    const storageKey = this._storageKey(key);
+    const payload = JSON.stringify(value);
+    try {
+      localStorage.setItem(storageKey, payload);
+    } catch {
+      sessionStorage.setItem(storageKey, payload);
+    }
   },
 
   _remove(key) {
-    sessionStorage.removeItem(this._storageKey(key));
+    const storageKey = this._storageKey(key);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {}
   },
 
   _storageKey(key) {
@@ -156,7 +181,7 @@ const DB = {
       id: pessoa.id,
       nome: pessoa.nome,
       documento: pessoa.documento || null,
-      tipo: pessoa.tipo === 'cliente' ? 'funcionario' : (pessoa.tipo || 'funcionario'),
+      tipo: this._normalizePessoaTipo(pessoa.tipo),
       telefone: pessoa.telefone || null,
       email: pessoa.email || null,
       endereco: pessoa.endereco || null,
@@ -172,7 +197,7 @@ const DB = {
       id: row.id,
       nome: row.nome,
       documento: row.documento || '',
-      tipo: row.tipo || 'funcionario',
+      tipo: this._normalizePessoaTipo(row.tipo),
       telefone: row.telefone || '',
       email: row.email || '',
       endereco: row.endereco || '',
@@ -180,6 +205,31 @@ const DB = {
       criadoEm: row.criado_em,
       atualizadoEm: row.atualizado_em,
     };
+  },
+
+  _normalizePessoaTipo(tipo) {
+    if (tipo === 'cliente') return 'funcionario';
+    if (['funcionario', 'fornecedor', 'ambos'].includes(tipo)) return tipo;
+    return 'funcionario';
+  },
+
+  _mergeById(locais, remotos) {
+    const merged = new Map();
+    const getTime = (item) => new Date(item?.atualizadoEm || item?.criadoEm || 0).getTime() || 0;
+
+    (locais || []).forEach(item => {
+      if (item?.id) merged.set(item.id, item);
+    });
+
+    (remotos || []).forEach(item => {
+      if (!item?.id) return;
+      const atual = merged.get(item.id);
+      if (!atual || getTime(item) >= getTime(atual)) {
+        merged.set(item.id, item);
+      }
+    });
+
+    return Array.from(merged.values());
   },
 
   _movToRow(mov) {
@@ -278,8 +328,9 @@ const DB = {
     if (Array.isArray(produtos) && (produtos.length > 0 || this.getProdutos().length === 0)) {
       this._set(this.KEYS.produtos, produtos.map(row => this._rowToProduto(row)));
     }
-    if (Array.isArray(pessoas) && (pessoas.length > 0 || this.getPessoas().length === 0)) {
-      this._set(this.KEYS.pessoas, pessoas.map(row => this._rowToPessoa(row)));
+    if (Array.isArray(pessoas)) {
+      const remotas = pessoas.map(row => this._rowToPessoa(row));
+      this._set(this.KEYS.pessoas, this._mergeById(this.getPessoas(), remotas));
     }
     if (Array.isArray(movimentacoes) && (movimentacoes.length > 0 || this.getMovimentacoes().length === 0)) {
       this._set(this.KEYS.movimentacoes, movimentacoes.map(row => this._rowToMov(row)));
@@ -354,7 +405,7 @@ const DB = {
   getPessoas() { return this._get(this.KEYS.pessoas); },
   savePessoa(pessoa) {
     const lista = this.getPessoas();
-    pessoa.tipo = pessoa.tipo === 'cliente' ? 'funcionario' : pessoa.tipo;
+    pessoa.tipo = this._normalizePessoaTipo(pessoa.tipo);
     pessoa.atualizadoEm = new Date().toISOString();
     if (pessoa.id) {
       const idx = lista.findIndex(p => p.id === pessoa.id);
