@@ -16,25 +16,25 @@ const Documentos = {
       <div class="documentos-container">
         <div class="documentos-header">
           <h2>Documentos & PDFs</h2>
-          <button class="btn btn-primary" onclick="Documentos.abrirModalUpload()">
+          <button type="button" class="btn btn-primary" data-doc-action="upload">
             📤 Upload de PDF
           </button>
         </div>
 
         <div class="documentos-filtros">
-          <button class="filtro-btn ${this.filtroAtual === "geral" ? "ativo" : ""}" onclick="Documentos.filtrar('geral', event)">
+          <button type="button" class="filtro-btn ${this.filtroAtual === "geral" ? "ativo" : ""}" data-doc-action="filter" data-filter="geral">
             Todos
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "manual" ? "ativo" : ""}" onclick="Documentos.filtrar('manual', event)">
+          <button type="button" class="filtro-btn ${this.filtroAtual === "manual" ? "ativo" : ""}" data-doc-action="filter" data-filter="manual">
             Manuais
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "especificacao" ? "ativo" : ""}" onclick="Documentos.filtrar('especificacao', event)">
+          <button type="button" class="filtro-btn ${this.filtroAtual === "especificacao" ? "ativo" : ""}" data-doc-action="filter" data-filter="especificacao">
             Especificações
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "certificado" ? "ativo" : ""}" onclick="Documentos.filtrar('certificado', event)">
+          <button type="button" class="filtro-btn ${this.filtroAtual === "certificado" ? "ativo" : ""}" data-doc-action="filter" data-filter="certificado">
             Certificados
           </button>
-          <input type="text" id="busca-docs" placeholder="Buscar documentos..." onkeyup="Documentos.buscar(this.value)" class="search-input">
+          <input type="text" id="busca-docs" placeholder="Buscar documentos..." class="search-input">
         </div>
 
         <div class="documentos-grid" id="docs-grid">
@@ -44,7 +44,48 @@ const Documentos = {
     `;
 
     document.getElementById("main-content").innerHTML = html;
+    this.bindEventos();
     await this.listar();
+  },
+
+  bindEventos() {
+    const container = document.querySelector(".documentos-container");
+    if (!container || container.dataset.bound === "true") return;
+    container.dataset.bound = "true";
+
+    container.addEventListener("click", (event) => {
+      const actionEl = event.target.closest("[data-doc-action]");
+      if (!actionEl || !container.contains(actionEl)) return;
+
+      const action = actionEl.dataset.docAction;
+      const docId = actionEl.dataset.docId;
+
+      if (action !== "filter") {
+        event.preventDefault();
+      }
+
+      if (action === "upload") {
+        this.abrirModalUpload();
+      } else if (action === "filter") {
+        this.filtrar(actionEl.dataset.filter || "geral", event);
+      } else if (action === "menu") {
+        this.abrirMenu(event, docId);
+      } else if (action === "visualizar") {
+        this.visualizar(docId);
+      } else if (action === "descarregar") {
+        this.descarregar(docId, actionEl.dataset.docName || "");
+      } else if (action === "editar") {
+        this.editarDoc(docId);
+      } else if (action === "deletar") {
+        this.deletar(docId);
+      }
+    });
+
+    container.addEventListener("input", (event) => {
+      if (event.target.id === "busca-docs") {
+        this.buscar(event.target.value);
+      }
+    });
   },
 
   async carregarBibliotecaPDF() {
@@ -156,18 +197,20 @@ const Documentos = {
   renderCard(doc) {
     const data = new Date(doc.criado_em);
     const dataFormatada = data.toLocaleDateString("pt-BR");
+    const docId = this.attr(doc.id);
+    const docNome = this.attr(doc.nome);
 
     return `
       <div class="doc-card">
         <div class="doc-header">
           <div class="doc-tipo">${this.sanitize(doc.tipo_documento)}</div>
           <div class="doc-menu">
-            <button class="btn-icon" onclick="Documentos.abrirMenu(event, ${this.jsArg(doc.id)})">⋮</button>
-            <div class="dropdown-menu" id="menu-${doc.id}" style="display:none;">
-              <button onclick="Documentos.visualizar(${this.jsArg(doc.id)})">👁️ Visualizar</button>
-              <button onclick="Documentos.descarregar(${this.jsArg(doc.id)}, ${this.jsArg(doc.nome)})">⬇️ Descarregar</button>
-              <button onclick="Documentos.editarDoc(${this.jsArg(doc.id)})">✏️ Editar</button>
-              <button onclick="Documentos.deletar(${this.jsArg(doc.id)})" style="color: #ff6b6b;">🗑️ Deletar</button>
+            <button type="button" class="btn-icon" data-doc-action="menu" data-doc-id="${docId}">⋮</button>
+            <div class="dropdown-menu" id="menu-${docId}" style="display:none;">
+              <button type="button" data-doc-action="visualizar" data-doc-id="${docId}">👁️ Visualizar</button>
+              <button type="button" data-doc-action="descarregar" data-doc-id="${docId}" data-doc-name="${docNome}">⬇️ Descarregar</button>
+              <button type="button" data-doc-action="editar" data-doc-id="${docId}">✏️ Editar</button>
+              <button type="button" data-doc-action="deletar" data-doc-id="${docId}" style="color: #ff6b6b;">🗑️ Deletar</button>
             </div>
           </div>
         </div>
@@ -185,8 +228,8 @@ const Documentos = {
         <div class="doc-footer">
           <small>${dataFormatada}</small>
           <div class="doc-actions">
-            <button type="button" class="btn btn-sm btn-ghost" onclick="Documentos.editarDoc(${this.jsArg(doc.id)})">Editar</button>
-            <button type="button" class="btn btn-sm btn-primary" onclick="Documentos.visualizar(${this.jsArg(doc.id)})">Abrir</button>
+            <button type="button" class="btn btn-sm btn-ghost" data-doc-action="editar" data-doc-id="${docId}">Editar</button>
+            <button type="button" class="btn btn-sm btn-primary" data-doc-action="visualizar" data-doc-id="${docId}">Abrir</button>
           </div>
         </div>
       </div>
@@ -210,7 +253,7 @@ const Documentos = {
     const modal = `
       <div class="modal-upload">
         <h3>Upload de PDF</h3>
-        <form id="form-upload" onsubmit="Documentos.enviarPDF(event)">
+        <form id="form-upload">
           <div class="form-group">
             <label>Nome do Documento*</label>
             <input type="text" id="doc-nome" required class="form-input" placeholder="Ex: Manual de Operação">
@@ -234,7 +277,7 @@ const Documentos = {
           <div class="form-group">
             <label>Arquivo PDF*</label>
             <div class="file-input-wrapper">
-              <input type="file" id="doc-arquivo" accept="application/pdf,.pdf" required class="file-input" onchange="Documentos.previewArquivo(this)">
+              <input type="file" id="doc-arquivo" accept="application/pdf,.pdf" required class="file-input">
               <label for="doc-arquivo" class="file-input-label">
                 <span id="file-name">Clique para selecionar um PDF</span>
               </label>
@@ -248,7 +291,7 @@ const Documentos = {
           </div>
 
           <div class="modal-buttons">
-            <button type="button" class="btn btn-ghost" onclick="UI.closeModal()">Cancelar</button>
+            <button type="button" class="btn btn-ghost" data-doc-modal-cancel>Cancelar</button>
             <button type="submit" class="btn btn-primary">Enviar PDF</button>
           </div>
         </form>
@@ -256,6 +299,15 @@ const Documentos = {
     `;
 
     UI.openModal("Upload de PDF", modal, false);
+    document
+      .getElementById("form-upload")
+      ?.addEventListener("submit", (event) => this.enviarPDF(event));
+    document
+      .getElementById("doc-arquivo")
+      ?.addEventListener("change", (event) => this.previewArquivo(event.target));
+    document
+      .querySelector("[data-doc-modal-cancel]")
+      ?.addEventListener("click", () => UI.closeModal());
   },
 
   previewArquivo(input, targetId = "file-name") {
@@ -423,21 +475,33 @@ const Documentos = {
       <div class="modal-visualizador">
         <div class="visualizador-header">
           <h3>${this.sanitize(doc.nome)}</h3>
-          <button class="btn-icon" onclick="UI.closeModal()">✕</button>
+          <button type="button" class="btn-icon" data-doc-viewer-close>✕</button>
         </div>
         <div id="pdf-viewer" style="height: 600px; overflow: auto; border: 1px solid #ddd; border-radius: 8px;">
           <canvas id="pdf-canvas" style="width: 100%; margin: 0 auto; display: block;"></canvas>
         </div>
         <div class="visualizador-controls">
-          <button class="btn btn-sm" onclick="Documentos.paginaAnterior()">← Anterior</button>
+          <button type="button" class="btn btn-sm" data-pdf-action="prev">← Anterior</button>
           <span id="pagina-info">Página 1</span>
-          <button class="btn btn-sm" onclick="Documentos.proximaPagina()">Próxima →</button>
-          <button class="btn btn-primary btn-sm" onclick="Documentos.descarregar(${this.jsArg(doc.id)}, ${this.jsArg(doc.nome)})">Descarregar</button>
+          <button type="button" class="btn btn-sm" data-pdf-action="next">Próxima →</button>
+          <button type="button" class="btn btn-primary btn-sm" data-pdf-action="download">Descarregar</button>
         </div>
       </div>
     `;
 
     UI.openModal(`Visualizador - ${doc.nome}`, modal, false);
+    document
+      .querySelector("[data-doc-viewer-close]")
+      ?.addEventListener("click", () => UI.closeModal());
+    document
+      .querySelector('[data-pdf-action="prev"]')
+      ?.addEventListener("click", () => this.paginaAnterior());
+    document
+      .querySelector('[data-pdf-action="next"]')
+      ?.addEventListener("click", () => this.proximaPagina());
+    document
+      .querySelector('[data-pdf-action="download"]')
+      ?.addEventListener("click", () => this.descarregar(doc.id, doc.nome));
 
     // Carregar e renderizar PDF
     await this.renderizarPDF(doc.arquivo_url);
@@ -533,7 +597,7 @@ const Documentos = {
     const modal = `
       <div class="modal-editar">
         <h3>Editar Documento</h3>
-        <form id="form-editar" onsubmit="Documentos.salvarEdicao(${this.jsArg(doc.id)}, event)">
+        <form id="form-editar">
           <div class="form-group">
             <label>Nome*</label>
             <input type="text" id="edit-nome" value="${this.sanitize(doc.nome)}" required class="form-input">
@@ -562,7 +626,7 @@ const Documentos = {
           <div class="form-group">
             <label>Substituir PDF (opcional)</label>
             <div class="file-input-wrapper">
-              <input type="file" id="edit-arquivo" accept="application/pdf,.pdf" class="file-input" onchange="Documentos.previewArquivo(this, 'edit-file-name')">
+              <input type="file" id="edit-arquivo" accept="application/pdf,.pdf" class="file-input">
               <label for="edit-arquivo" class="file-input-label">
                 <span id="edit-file-name">Manter PDF atual</span>
               </label>
@@ -571,7 +635,7 @@ const Documentos = {
           </div>
 
           <div class="modal-buttons">
-            <button type="button" class="btn btn-ghost" onclick="UI.closeModal()">Cancelar</button>
+            <button type="button" class="btn btn-ghost" data-doc-modal-cancel>Cancelar</button>
             <button type="submit" class="btn btn-primary">Salvar</button>
           </div>
         </form>
@@ -579,6 +643,17 @@ const Documentos = {
     `;
 
     UI.openModal("Editar Documento", modal, false);
+    document
+      .getElementById("form-editar")
+      ?.addEventListener("submit", (event) => this.salvarEdicao(doc.id, event));
+    document
+      .getElementById("edit-arquivo")
+      ?.addEventListener("change", (event) =>
+        this.previewArquivo(event.target, "edit-file-name"),
+      );
+    document
+      .querySelector("[data-doc-modal-cancel]")
+      ?.addEventListener("click", () => UI.closeModal());
   },
 
   async salvarEdicao(docId, event) {
@@ -757,6 +832,10 @@ const Documentos = {
     return this.sanitize(JSON.stringify(String(value ?? "")));
   },
 
+  attr(value) {
+    return this.sanitize(String(value ?? ""));
+  },
+
   encontrarDocumento(docId) {
     return this.docs.find((doc) => String(doc.id) === String(docId));
   },
@@ -793,3 +872,5 @@ const Documentos = {
     this.renderGrid();
   },
 };
+
+window.Documentos = Documentos;
