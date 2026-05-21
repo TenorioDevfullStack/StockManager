@@ -22,16 +22,16 @@ const Documentos = {
         </div>
 
         <div class="documentos-filtros">
-          <button class="filtro-btn ${this.filtroAtual === "geral" ? "ativo" : ""}" onclick="Documentos.filtrar('geral')">
+          <button class="filtro-btn ${this.filtroAtual === "geral" ? "ativo" : ""}" onclick="Documentos.filtrar('geral', event)">
             Todos
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "manual" ? "ativo" : ""}" onclick="Documentos.filtrar('manual')">
+          <button class="filtro-btn ${this.filtroAtual === "manual" ? "ativo" : ""}" onclick="Documentos.filtrar('manual', event)">
             Manuais
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "especificacao" ? "ativo" : ""}" onclick="Documentos.filtrar('especificacao')">
+          <button class="filtro-btn ${this.filtroAtual === "especificacao" ? "ativo" : ""}" onclick="Documentos.filtrar('especificacao', event)">
             Especificações
           </button>
-          <button class="filtro-btn ${this.filtroAtual === "certificado" ? "ativo" : ""}" onclick="Documentos.filtrar('certificado')">
+          <button class="filtro-btn ${this.filtroAtual === "certificado" ? "ativo" : ""}" onclick="Documentos.filtrar('certificado', event)">
             Certificados
           </button>
           <input type="text" id="busca-docs" placeholder="Buscar documentos..." onkeyup="Documentos.buscar(this.value)" class="search-input">
@@ -73,6 +73,9 @@ const Documentos = {
   },
 
   async listar() {
+    this.docs = DB.getDocumentos?.() || [];
+    this.renderGrid();
+
     if (!DB.remoteReady || !DB.user) return;
 
     try {
@@ -83,21 +86,26 @@ const Documentos = {
         .order("criado_em", { ascending: false });
 
       if (error) throw error;
-      this.docs = data || [];
+      this.docs = (data || []).map((doc) => this.normalizarDocumento(doc));
+      DB.setDocumentos?.(this.docs);
       this.renderGrid();
     } catch (error) {
       console.error("Erro ao listar documentos:", error);
-      UI.toast("Erro ao carregar documentos", "error");
+      if (this.docs.length) {
+        UI.toast("Mostrando documentos salvos localmente.", "info");
+      } else {
+        UI.toast("Erro ao carregar documentos", "error");
+      }
     }
   },
 
-  filtrar(tipo) {
+  filtrar(tipo, event) {
     this.filtroAtual = tipo;
     this.renderGrid();
     document.querySelectorAll(".filtro-btn").forEach((btn) => {
       btn.classList.remove("ativo");
     });
-    event.target.classList.add("ativo");
+    event?.target?.classList.add("ativo");
   },
 
   buscar(termo) {
@@ -126,6 +134,7 @@ const Documentos = {
     }
 
     const grid = document.getElementById("docs-grid");
+    if (!grid) return;
     if (!docs.length) {
       grid.innerHTML = '<p class="empty-state">Nenhum documento encontrado</p>';
       return;
@@ -136,6 +145,7 @@ const Documentos = {
 
   renderGridFiltered(docs) {
     const grid = document.getElementById("docs-grid");
+    if (!grid) return;
     if (!docs.length) {
       grid.innerHTML = '<p class="empty-state">Nenhum documento encontrado</p>';
       return;
@@ -150,14 +160,14 @@ const Documentos = {
     return `
       <div class="doc-card">
         <div class="doc-header">
-          <div class="doc-tipo">${doc.tipo_documento}</div>
+          <div class="doc-tipo">${this.sanitize(doc.tipo_documento)}</div>
           <div class="doc-menu">
-            <button class="btn-icon" onclick="Documentos.abrirMenu(event, '${doc.id}')">⋮</button>
+            <button class="btn-icon" onclick="Documentos.abrirMenu(event, ${this.jsArg(doc.id)})">⋮</button>
             <div class="dropdown-menu" id="menu-${doc.id}" style="display:none;">
-              <button onclick="Documentos.visualizar('${doc.id}')">👁️ Visualizar</button>
-              <button onclick="Documentos.descarregar('${doc.id}', '${doc.nome}')">⬇️ Descarregar</button>
-              <button onclick="Documentos.editarDoc('${doc.id}')">✏️ Editar</button>
-              <button onclick="Documentos.deletar('${doc.id}')" style="color: #ff6b6b;">🗑️ Deletar</button>
+              <button onclick="Documentos.visualizar(${this.jsArg(doc.id)})">👁️ Visualizar</button>
+              <button onclick="Documentos.descarregar(${this.jsArg(doc.id)}, ${this.jsArg(doc.nome)})">⬇️ Descarregar</button>
+              <button onclick="Documentos.editarDoc(${this.jsArg(doc.id)})">✏️ Editar</button>
+              <button onclick="Documentos.deletar(${this.jsArg(doc.id)})" style="color: #ff6b6b;">🗑️ Deletar</button>
             </div>
           </div>
         </div>
@@ -174,7 +184,7 @@ const Documentos = {
         }
         <div class="doc-footer">
           <small>${dataFormatada}</small>
-          <button class="btn btn-sm btn-primary" onclick="Documentos.visualizar('${doc.id}')">Abrir</button>
+          <button class="btn btn-sm btn-primary" onclick="Documentos.visualizar(${this.jsArg(doc.id)})">Abrir</button>
         </div>
       </div>
     `;
@@ -244,9 +254,14 @@ const Documentos = {
     UI.openModal("Upload de PDF", modal, false);
   },
 
-  previewArquivo(input) {
-    const fileName = input.files[0]?.name || "Clique para selecionar um PDF";
-    document.getElementById("file-name").textContent = fileName;
+  previewArquivo(input, targetId = "file-name") {
+    const label = document.getElementById(targetId);
+    if (!label) return;
+    const fallback =
+      targetId === "edit-file-name"
+        ? "Manter PDF atual"
+        : "Clique para selecionar um PDF";
+    label.textContent = input.files[0]?.name || fallback;
   },
 
   async enviarPDF(event) {
@@ -275,6 +290,8 @@ const Documentos = {
 
     const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
     const loading = UI.toast("Enviando arquivo...", "loading");
+    let caminhoArquivo = "";
+    let metadadosSalvos = false;
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = "Enviando...";
@@ -283,7 +300,7 @@ const Documentos = {
     try {
       // Gerar caminho único para o arquivo
       const timestamp = Date.now();
-      const caminhoArquivo = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+      caminhoArquivo = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
       // Fazer upload para Supabase Storage
       const { error: uploadError } = await DB.supabase.storage
@@ -312,8 +329,30 @@ const Documentos = {
         .map((t) => t.trim())
         .filter((t) => t);
 
-      const { error: dbError } = await DB.supabase.from("documentos").insert([
-        {
+      const { data: docSalvo, error: dbError } = await DB.supabase
+        .from("documentos")
+        .insert([
+          {
+            nome,
+            descricao,
+            tipo_documento: tipo,
+            arquivo_url: arquivoUrl,
+            arquivo_caminho: caminhoArquivo,
+            tags,
+            user_id: DB.user.id,
+          },
+        ])
+        .select("*")
+        .single();
+
+      if (dbError) {
+        await DB.supabase.storage.from("documentos").remove([caminhoArquivo]);
+        throw dbError;
+      }
+
+      metadadosSalvos = true;
+      this.salvarDocumentoLocal(
+        docSalvo || {
           nome,
           descricao,
           tipo_documento: tipo,
@@ -322,12 +361,7 @@ const Documentos = {
           tags,
           user_id: DB.user.id,
         },
-      ]);
-
-      if (dbError) {
-        await DB.supabase.storage.from("documentos").remove([caminhoArquivo]);
-        throw dbError;
-      }
+      );
 
       UI.closeModal();
       UI.closeToast(loading);
@@ -335,6 +369,9 @@ const Documentos = {
       await this.listar();
     } catch (error) {
       console.error("Erro ao enviar PDF:", error);
+      if (caminhoArquivo && !metadadosSalvos) {
+        await DB.supabase.storage.from("documentos").remove([caminhoArquivo]);
+      }
       UI.closeToast(loading);
       UI.toast("Erro ao enviar PDF: " + error.message, "error");
     } finally {
@@ -380,7 +417,7 @@ const Documentos = {
           <button class="btn btn-sm" onclick="Documentos.paginaAnterior()">← Anterior</button>
           <span id="pagina-info">Página 1</span>
           <button class="btn btn-sm" onclick="Documentos.proximaPagina()">Próxima →</button>
-          <button class="btn btn-primary btn-sm" onclick="Documentos.descarregar('${doc.id}', '${doc.nome}')">Descarregar</button>
+          <button class="btn btn-primary btn-sm" onclick="Documentos.descarregar(${this.jsArg(doc.id)}, ${this.jsArg(doc.nome)})">Descarregar</button>
         </div>
       </div>
     `;
@@ -475,7 +512,7 @@ const Documentos = {
     const modal = `
       <div class="modal-editar">
         <h3>Editar Documento</h3>
-        <form id="form-editar" onsubmit="Documentos.salvarEdicao('${doc.id}', event)">
+        <form id="form-editar" onsubmit="Documentos.salvarEdicao(${this.jsArg(doc.id)}, event)">
           <div class="form-group">
             <label>Nome*</label>
             <input type="text" id="edit-nome" value="${this.sanitize(doc.nome)}" required class="form-input">
@@ -498,7 +535,18 @@ const Documentos = {
 
           <div class="form-group">
             <label>Tags (separadas por vírgula)</label>
-            <input type="text" id="edit-tags" value="${(doc.tags || []).join(", ")}" class="form-input">
+            <input type="text" id="edit-tags" value="${this.sanitize((doc.tags || []).join(", "))}" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label>Substituir PDF (opcional)</label>
+            <div class="file-input-wrapper">
+              <input type="file" id="edit-arquivo" accept="application/pdf,.pdf" class="file-input" onchange="Documentos.previewArquivo(this, 'edit-file-name')">
+              <label for="edit-arquivo" class="file-input-label">
+                <span id="edit-file-name">Manter PDF atual</span>
+              </label>
+            </div>
+            <small>Selecione outro PDF apenas se quiser trocar o arquivo salvo.</small>
           </div>
 
           <div class="modal-buttons">
@@ -515,36 +563,121 @@ const Documentos = {
   async salvarEdicao(docId, event) {
     event.preventDefault();
 
+    if (!DB.remoteReady || !DB.user?.id) {
+      UI.toast("Faça login para editar documentos.", "error");
+      return;
+    }
+
+    const docAtual = this.docs.find((d) => d.id === docId);
+    if (!docAtual) return;
+
     const nome = document.getElementById("edit-nome").value.trim();
     const descricao = document.getElementById("edit-descricao").value.trim();
     const tipo = document.getElementById("edit-tipo").value;
     const tagsStr = document.getElementById("edit-tags").value;
+    const novoArquivo = document.getElementById("edit-arquivo")?.files[0];
 
     const tags = tagsStr
       .split(",")
       .map((t) => t.trim())
       .filter((t) => t);
 
-    try {
-      const { error } = await DB.supabase
-        .from("documentos")
-        .update({
-          nome,
-          descricao,
-          tipo_documento: tipo,
-          tags,
-        })
-        .eq("id", docId)
-        .eq("user_id", DB.user.id);
+    if (novoArquivo && !this.ehPDF(novoArquivo)) {
+      UI.toast("Por favor, selecione um arquivo PDF válido", "error");
+      return;
+    }
 
-      if (error) throw error;
+    if (novoArquivo?.size > 50 * 1024 * 1024) {
+      UI.toast("Arquivo muito grande. Máximo: 50MB", "error");
+      return;
+    }
+
+    const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
+    const loading = UI.toast("Salvando documento...", "loading");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Salvando...";
+    }
+
+    let novoCaminho = "";
+    let novoArquivoConfirmado = false;
+
+    try {
+      const payload = {
+        nome,
+        descricao,
+        tipo_documento: tipo,
+        tags,
+      };
+
+      if (novoArquivo) {
+        const timestamp = Date.now();
+        novoCaminho = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+
+        const { error: uploadError } = await DB.supabase.storage
+          .from("documentos")
+          .upload(novoCaminho, novoArquivo, {
+            cacheControl: "3600",
+            contentType: "application/pdf",
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = DB.supabase.storage
+          .from("documentos")
+          .getPublicUrl(novoCaminho);
+
+        payload.arquivo_url = urlData?.publicUrl;
+        payload.arquivo_caminho = novoCaminho;
+
+        if (!payload.arquivo_url) {
+          throw new Error("Não foi possível gerar a URL pública do arquivo.");
+        }
+      }
+
+      const { data: docSalvo, error } = await DB.supabase
+        .from("documentos")
+        .update(payload)
+        .eq("id", docId)
+        .eq("user_id", DB.user.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        if (novoCaminho) {
+          await DB.supabase.storage.from("documentos").remove([novoCaminho]);
+        }
+        throw error;
+      }
+
+      novoArquivoConfirmado = true;
+
+      if (novoCaminho && docAtual.arquivo_caminho) {
+        const { error: removeError } = await DB.supabase.storage
+          .from("documentos")
+          .remove([docAtual.arquivo_caminho]);
+        if (removeError) console.warn("PDF antigo não removido:", removeError);
+      }
+
+      this.salvarDocumentoLocal(docSalvo || { ...docAtual, ...payload });
 
       UI.closeModal();
+      UI.closeToast(loading);
       UI.toast("Documento atualizado!", "success");
       await this.listar();
     } catch (error) {
       console.error("Erro ao atualizar:", error);
-      UI.toast("Erro ao atualizar documento", "error");
+      if (novoCaminho && !novoArquivoConfirmado) {
+        await DB.supabase.storage.from("documentos").remove([novoCaminho]);
+      }
+      UI.closeToast(loading);
+      UI.toast("Erro ao atualizar documento: " + error.message, "error");
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Salvar";
+      }
     }
   },
 
@@ -576,6 +709,7 @@ const Documentos = {
 
       if (error) throw error;
 
+      this.removerDocumentoLocal(docId);
       UI.closeToast(loading);
       UI.toast("Documento deletado!", "success");
       await this.listar();
@@ -590,5 +724,41 @@ const Documentos = {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  },
+
+  jsArg(value) {
+    return this.sanitize(JSON.stringify(String(value ?? "")));
+  },
+
+  normalizarDocumento(doc) {
+    return {
+      id: doc.id,
+      user_id: doc.user_id || DB.user?.id,
+      nome: doc.nome || "",
+      descricao: doc.descricao || "",
+      arquivo_url: doc.arquivo_url || "",
+      arquivo_caminho: doc.arquivo_caminho || "",
+      tipo_documento: doc.tipo_documento || "geral",
+      produto_id: doc.produto_id || null,
+      tags: Array.isArray(doc.tags) ? doc.tags : [],
+      criado_em: doc.criado_em || new Date().toISOString(),
+      atualizado_em: doc.atualizado_em || new Date().toISOString(),
+    };
+  },
+
+  salvarDocumentoLocal(doc) {
+    const normalizado = this.normalizarDocumento(doc);
+    this.docs = [
+      normalizado,
+      ...this.docs.filter((item) => item.id !== normalizado.id),
+    ].sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
+    DB.saveDocumentoCache?.(normalizado);
+    this.renderGrid();
+  },
+
+  removerDocumentoLocal(docId) {
+    this.docs = this.docs.filter((doc) => doc.id !== docId);
+    DB.deleteDocumentoCache?.(docId);
+    this.renderGrid();
   },
 };

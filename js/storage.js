@@ -7,6 +7,7 @@ const DB = {
     produtos: 'estoque_produtos',
     pessoas: 'estoque_pessoas',
     movimentacoes: 'estoque_movimentacoes',
+    documentos: 'estoque_documentos',
     config: 'estoque_config',
   },
 
@@ -32,6 +33,7 @@ const DB = {
     this._remove(this.KEYS.produtos);
     this._remove(this.KEYS.pessoas);
     this._remove(this.KEYS.movimentacoes);
+    this._remove(this.KEYS.documentos);
     this._remove(this.KEYS.config);
   },
 
@@ -208,6 +210,38 @@ const DB = {
     };
   },
 
+  _documentoToRow(doc) {
+    return {
+      id: doc.id,
+      user_id: this.user?.id,
+      nome: doc.nome,
+      descricao: doc.descricao || null,
+      arquivo_url: doc.arquivo_url,
+      arquivo_caminho: doc.arquivo_caminho,
+      tipo_documento: doc.tipo_documento || 'geral',
+      produto_id: doc.produto_id || null,
+      tags: Array.isArray(doc.tags) ? doc.tags : [],
+      criado_em: doc.criado_em || new Date().toISOString(),
+      atualizado_em: doc.atualizado_em || new Date().toISOString(),
+    };
+  },
+
+  _rowToDocumento(row) {
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      nome: row.nome,
+      descricao: row.descricao || '',
+      arquivo_url: row.arquivo_url,
+      arquivo_caminho: row.arquivo_caminho,
+      tipo_documento: row.tipo_documento || 'geral',
+      produto_id: row.produto_id || null,
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      criado_em: row.criado_em,
+      atualizado_em: row.atualizado_em,
+    };
+  },
+
   async _tryRemote(action, fallbackMessage = 'Falha ao sincronizar com o Supabase.') {
     if (!this.remoteReady || !this.user) return null;
     try {
@@ -236,6 +270,10 @@ const DB = {
       () => this.supabase.from('movimentacoes').select('*').order('criado_em', { ascending: false }),
       'Não foi possível buscar movimentações do Supabase.'
     );
+    const documentos = await this._tryRemote(
+      () => this.supabase.from('documentos').select('*').order('criado_em', { ascending: false }),
+      'Não foi possível buscar documentos do Supabase.'
+    );
 
     if (Array.isArray(produtos) && (produtos.length > 0 || this.getProdutos().length === 0)) {
       this._set(this.KEYS.produtos, produtos.map(row => this._rowToProduto(row)));
@@ -245,6 +283,9 @@ const DB = {
     }
     if (Array.isArray(movimentacoes) && (movimentacoes.length > 0 || this.getMovimentacoes().length === 0)) {
       this._set(this.KEYS.movimentacoes, movimentacoes.map(row => this._rowToMov(row)));
+    }
+    if (Array.isArray(documentos)) {
+      this.setDocumentos(documentos.map(row => this._rowToDocumento(row)));
     }
   },
 
@@ -363,6 +404,30 @@ const DB = {
       'Movimentação salva localmente, mas não enviada ao Supabase.'
     );
     return mov;
+  },
+
+  // ---- DOCUMENTOS ----
+  getDocumentos() {
+    return this._get(this.KEYS.documentos);
+  },
+
+  setDocumentos(documentos) {
+    const lista = Array.isArray(documentos) ? documentos.map(doc => this._rowToDocumento(doc)) : [];
+    lista.sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
+    this._set(this.KEYS.documentos, lista);
+  },
+
+  saveDocumentoCache(documento) {
+    if (!documento?.id) return documento;
+    const doc = this._rowToDocumento(documento);
+    const lista = this.getDocumentos().filter(item => item.id !== doc.id);
+    lista.unshift(doc);
+    this.setDocumentos(lista);
+    return doc;
+  },
+
+  deleteDocumentoCache(id) {
+    this.setDocumentos(this.getDocumentos().filter(doc => doc.id !== id));
   },
 
   // ---- CONFIG ----

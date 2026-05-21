@@ -5,6 +5,7 @@
 Foi implementado um sistema completo de gerenciamento de arquivos PDF no StockManager, permitindo:
 
 - ✅ Upload de PDFs ao banco de dados (Supabase Storage)
+- ✅ Documentos permanecem salvos na aba Documentos para consulta e edição posterior
 - ✅ Visualização de PDFs no navegador com navegação por páginas
 - ✅ Download de PDFs
 - ✅ Edição de metadados (nome, descrição, tipo, tags)
@@ -114,7 +115,7 @@ Você pode executar isso:
 
 1. Clique no menu (⋮) no card do documento
 2. Selecione **"✏️ Editar"**
-3. Modifique os dados desejados
+3. Modifique os dados desejados ou selecione outro PDF para substituir o arquivo atual
 4. Clique em **"Salvar"**
 
 ### Filtros e Busca
