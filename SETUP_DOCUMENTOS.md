@@ -180,6 +180,12 @@ Você pode executar isso:
 - Verifique se o bucket "documentos" existe em Storage
 - Verifique se as políticas de RLS estão configuradas corretamente
 
+### Erro: "Bucket not found"
+
+- Execute a migration `supabase/migrations/20260521001000_create_documents_storage_bucket.sql`
+- Ou crie manualmente um bucket público chamado `documentos` no Supabase Storage
+- Depois configure as políticas de Storage para permitir `insert`, `select` e `delete` na pasta do usuário autenticado
+
 ### PDFs não aparecem
 
 - Confirme que o bucket é público

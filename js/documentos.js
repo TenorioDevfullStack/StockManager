@@ -373,7 +373,7 @@ const Documentos = {
         await DB.supabase.storage.from("documentos").remove([caminhoArquivo]);
       }
       UI.closeToast(loading);
-      UI.toast("Erro ao enviar PDF: " + error.message, "error");
+      UI.toast("Erro ao enviar PDF: " + this.mensagemErroUpload(error), "error");
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -398,6 +398,14 @@ const Documentos = {
       .replace(/^_+|_+$/g, "")
       .slice(0, 80);
     return slug || "documento";
+  },
+
+  mensagemErroUpload(error) {
+    const message = String(error?.message || "");
+    if (message.toLowerCase().includes("bucket not found")) {
+      return "bucket 'documentos' não encontrado. Execute a migration de Storage no Supabase.";
+    }
+    return message || "falha ao salvar arquivo.";
   },
 
   async visualizar(docId) {
@@ -672,7 +680,7 @@ const Documentos = {
         await DB.supabase.storage.from("documentos").remove([novoCaminho]);
       }
       UI.closeToast(loading);
-      UI.toast("Erro ao atualizar documento: " + error.message, "error");
+      UI.toast("Erro ao atualizar documento: " + this.mensagemErroUpload(error), "error");
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
