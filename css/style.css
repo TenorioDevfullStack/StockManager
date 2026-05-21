@@ -1460,12 +1460,19 @@ textarea.form-input {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 .doc-footer small {
   color: var(--text3);
   font-size: 0.75rem;
+}
+.doc-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .empty-state {

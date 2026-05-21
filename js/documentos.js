@@ -184,7 +184,10 @@ const Documentos = {
         }
         <div class="doc-footer">
           <small>${dataFormatada}</small>
-          <button class="btn btn-sm btn-primary" onclick="Documentos.visualizar(${this.jsArg(doc.id)})">Abrir</button>
+          <div class="doc-actions">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="Documentos.editarDoc(${this.jsArg(doc.id)})">Editar</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="Documentos.visualizar(${this.jsArg(doc.id)})">Abrir</button>
+          </div>
         </div>
       </div>
     `;
@@ -193,6 +196,7 @@ const Documentos = {
   abrirMenu(event, docId) {
     event.stopPropagation();
     const menu = document.getElementById(`menu-${docId}`);
+    if (!menu) return;
 
     // Fechar outros menus
     document.querySelectorAll(".dropdown-menu").forEach((m) => {
@@ -409,8 +413,11 @@ const Documentos = {
   },
 
   async visualizar(docId) {
-    const doc = this.docs.find((d) => d.id === docId);
-    if (!doc) return;
+    const doc = this.encontrarDocumento(docId);
+    if (!doc) {
+      UI.toast("Documento não encontrado para visualização.", "error");
+      return;
+    }
 
     const modal = `
       <div class="modal-visualizador">
@@ -492,8 +499,11 @@ const Documentos = {
   },
 
   async descarregar(docId, nome) {
-    const doc = this.docs.find((d) => d.id === docId);
-    if (!doc) return;
+    const doc = this.encontrarDocumento(docId);
+    if (!doc) {
+      UI.toast("Documento não encontrado para download.", "error");
+      return;
+    }
 
     try {
       const response = await fetch(doc.arquivo_url);
@@ -514,8 +524,11 @@ const Documentos = {
   },
 
   editarDoc(docId) {
-    const doc = this.docs.find((d) => d.id === docId);
-    if (!doc) return;
+    const doc = this.encontrarDocumento(docId);
+    if (!doc) {
+      UI.toast("Documento não encontrado para edição.", "error");
+      return;
+    }
 
     const modal = `
       <div class="modal-editar">
@@ -576,8 +589,11 @@ const Documentos = {
       return;
     }
 
-    const docAtual = this.docs.find((d) => d.id === docId);
-    if (!docAtual) return;
+    const docAtual = this.encontrarDocumento(docId);
+    if (!docAtual) {
+      UI.toast("Documento não encontrado para edição.", "error");
+      return;
+    }
 
     const nome = document.getElementById("edit-nome").value.trim();
     const descricao = document.getElementById("edit-descricao").value.trim();
@@ -647,7 +663,7 @@ const Documentos = {
       const { data: docSalvo, error } = await DB.supabase
         .from("documentos")
         .update(payload)
-        .eq("id", docId)
+        .eq("id", docAtual.id)
         .eq("user_id", DB.user.id)
         .select("*")
         .single();
@@ -697,8 +713,11 @@ const Documentos = {
     )
       return;
 
-    const doc = this.docs.find((d) => d.id === docId);
-    if (!doc) return;
+    const doc = this.encontrarDocumento(docId);
+    if (!doc) {
+      UI.toast("Documento não encontrado para exclusão.", "error");
+      return;
+    }
 
     const loading = UI.toast("Deletando...", "loading");
 
@@ -712,12 +731,12 @@ const Documentos = {
       const { error } = await DB.supabase
         .from("documentos")
         .delete()
-        .eq("id", docId)
+        .eq("id", doc.id)
         .eq("user_id", DB.user.id);
 
       if (error) throw error;
 
-      this.removerDocumentoLocal(docId);
+      this.removerDocumentoLocal(doc.id);
       UI.closeToast(loading);
       UI.toast("Documento deletado!", "success");
       await this.listar();
@@ -736,6 +755,10 @@ const Documentos = {
 
   jsArg(value) {
     return this.sanitize(JSON.stringify(String(value ?? "")));
+  },
+
+  encontrarDocumento(docId) {
+    return this.docs.find((doc) => String(doc.id) === String(docId));
   },
 
   normalizarDocumento(doc) {
@@ -758,14 +781,14 @@ const Documentos = {
     const normalizado = this.normalizarDocumento(doc);
     this.docs = [
       normalizado,
-      ...this.docs.filter((item) => item.id !== normalizado.id),
+      ...this.docs.filter((item) => String(item.id) !== String(normalizado.id)),
     ].sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
     DB.saveDocumentoCache?.(normalizado);
     this.renderGrid();
   },
 
   removerDocumentoLocal(docId) {
-    this.docs = this.docs.filter((doc) => doc.id !== docId);
+    this.docs = this.docs.filter((doc) => String(doc.id) !== String(docId));
     DB.deleteDocumentoCache?.(docId);
     this.renderGrid();
   },
