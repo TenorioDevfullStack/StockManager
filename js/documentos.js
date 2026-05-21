@@ -475,10 +475,21 @@ const Documentos = {
       <div class="modal-visualizador">
         <div class="visualizador-header">
           <h3>${this.sanitize(doc.nome)}</h3>
-          <button type="button" class="btn-icon" data-doc-viewer-close>✕</button>
+          <div class="visualizador-header-actions">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              data-pdf-action="fullscreen"
+              aria-label="Abrir PDF em tela cheia"
+              title="Tela cheia"
+            >
+              ⛶ Tela cheia
+            </button>
+            <button type="button" class="btn-icon" data-doc-viewer-close>✕</button>
+          </div>
         </div>
-        <div id="pdf-viewer" style="height: 600px; overflow: auto; border: 1px solid #ddd; border-radius: 8px;">
-          <canvas id="pdf-canvas" style="width: 100%; margin: 0 auto; display: block;"></canvas>
+        <div id="pdf-viewer">
+          <canvas id="pdf-canvas"></canvas>
         </div>
         <div class="visualizador-controls">
           <button type="button" class="btn btn-sm" data-pdf-action="prev">← Anterior</button>
@@ -490,15 +501,19 @@ const Documentos = {
     `;
 
     UI.openModal(`Visualizador - ${doc.nome}`, modal, false);
+    this.bindEventosTelaCheia();
     document
       .querySelector("[data-doc-viewer-close]")
-      ?.addEventListener("click", () => UI.closeModal());
+      ?.addEventListener("click", () => this.fecharVisualizador());
     document
       .querySelector('[data-pdf-action="prev"]')
       ?.addEventListener("click", () => this.paginaAnterior());
     document
       .querySelector('[data-pdf-action="next"]')
       ?.addEventListener("click", () => this.proximaPagina());
+    document
+      .querySelector('[data-pdf-action="fullscreen"]')
+      ?.addEventListener("click", () => this.alternarTelaCheia());
     document
       .querySelector('[data-pdf-action="download"]')
       ?.addEventListener("click", () => this.descarregar(doc.id, doc.nome));
@@ -509,6 +524,9 @@ const Documentos = {
 
   paginaAtual: 1,
   pdfDocumento: null,
+  fullscreenBound: false,
+  pdfRenderTimer: null,
+  pdfRenderTask: null,
 
   async renderizarPDF(url) {
     try {
@@ -531,21 +549,44 @@ const Documentos = {
     try {
       const pagina = await this.pdfDocumento.getPage(num);
       const canvas = document.getElementById("pdf-canvas");
-      const context = canvas.getContext("2d");
+      if (!canvas) return;
 
-      const viewport = pagina.getViewport({ scale: 1.5 });
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      const viewer = document.getElementById("pdf-viewer");
+      const viewportBase = pagina.getViewport({ scale: 1 });
+      const larguraDisponivel = Math.max(320, (viewer?.clientWidth || 900) - 32);
+      const escala = Math.min(
+        2.5,
+        Math.max(0.9, larguraDisponivel / viewportBase.width),
+      );
+
+      const viewport = pagina.getViewport({ scale: escala });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
 
-      await pagina.render({
+      this.pdfRenderTask?.cancel();
+      const renderTask = pagina.render({
         canvasContext: context,
         viewport: viewport,
-      }).promise;
+      });
+      this.pdfRenderTask = renderTask;
+      await renderTask.promise;
 
-      document.getElementById("pagina-info").textContent =
-        `Página ${num} de ${this.pdfDocumento.numPages}`;
+      if (this.pdfRenderTask === renderTask) {
+        this.pdfRenderTask = null;
+      }
+
+      const paginaInfo = document.getElementById("pagina-info");
+      if (paginaInfo) {
+        paginaInfo.textContent = `Página ${num} de ${this.pdfDocumento.numPages}`;
+      }
       this.paginaAtual = num;
     } catch (error) {
+      if (error?.name === "RenderingCancelledException") return;
       console.error("Erro ao renderizar página:", error);
     }
   },
@@ -560,6 +601,118 @@ const Documentos = {
     if (this.paginaAtual > 1) {
       await this.renderPagina(this.paginaAtual - 1);
     }
+  },
+
+  bindEventosTelaCheia() {
+    if (this.fullscreenBound) return;
+
+    document.addEventListener("fullscreenchange", () => {
+      this.atualizarEstadoTelaCheia();
+      this.agendarRenderizacaoPDF();
+    });
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Escape" || !this.estaEmTelaCheia()) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.sairTelaCheia(document.querySelector(".modal-visualizador")).then(
+          () => {
+            this.atualizarEstadoTelaCheia();
+            this.agendarRenderizacaoPDF();
+          },
+        );
+      },
+      true,
+    );
+    window.addEventListener("resize", () => this.agendarRenderizacaoPDF());
+    this.fullscreenBound = true;
+  },
+
+  async alternarTelaCheia() {
+    const visualizador = document.querySelector(".modal-visualizador");
+    if (!visualizador) return;
+
+    if (this.estaEmTelaCheia()) {
+      await this.sairTelaCheia(visualizador);
+    } else {
+      await this.entrarTelaCheia(visualizador);
+    }
+
+    this.atualizarEstadoTelaCheia();
+    this.agendarRenderizacaoPDF();
+  },
+
+  async entrarTelaCheia(visualizador) {
+    const requestFullscreen = visualizador.requestFullscreen;
+
+    if (!requestFullscreen) {
+      visualizador.classList.add("pdf-fullscreen-fallback");
+      return;
+    }
+
+    try {
+      await requestFullscreen.call(visualizador);
+    } catch (error) {
+      console.warn("Tela cheia indisponível, usando modo expandido:", error);
+      visualizador.classList.add("pdf-fullscreen-fallback");
+    }
+  },
+
+  async sairTelaCheia(visualizador) {
+    visualizador?.classList.remove("pdf-fullscreen-fallback");
+
+    if (!document.fullscreenElement || !document.exitFullscreen) return;
+
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      console.warn("Erro ao sair da tela cheia:", error);
+    }
+  },
+
+  estaEmTelaCheia() {
+    const visualizador = document.querySelector(".modal-visualizador");
+    return Boolean(
+      visualizador &&
+        (document.fullscreenElement === visualizador ||
+          visualizador.classList.contains("pdf-fullscreen-fallback")),
+    );
+  },
+
+  atualizarEstadoTelaCheia() {
+    const visualizador = document.querySelector(".modal-visualizador");
+    if (!visualizador) return;
+
+    const botao = document.querySelector('[data-pdf-action="fullscreen"]');
+    const ativo = this.estaEmTelaCheia();
+
+    if (botao) {
+      botao.textContent = ativo ? "↙ Sair" : "⛶ Tela cheia";
+      botao.setAttribute(
+        "aria-label",
+        ativo ? "Sair da tela cheia" : "Abrir PDF em tela cheia",
+      );
+      botao.title = ativo ? "Sair da tela cheia" : "Tela cheia";
+    }
+  },
+
+  agendarRenderizacaoPDF() {
+    if (!this.pdfDocumento) return;
+
+    clearTimeout(this.pdfRenderTimer);
+    this.pdfRenderTimer = setTimeout(() => {
+      this.renderPagina(this.paginaAtual);
+    }, 120);
+  },
+
+  async fecharVisualizador() {
+    clearTimeout(this.pdfRenderTimer);
+    this.pdfRenderTask?.cancel();
+    this.pdfRenderTask = null;
+    await this.sairTelaCheia(document.querySelector(".modal-visualizador"));
+    UI.closeModal();
   },
 
   async descarregar(docId, nome) {

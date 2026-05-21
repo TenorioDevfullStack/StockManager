@@ -1567,6 +1567,14 @@ textarea.form-input {
 .visualizador-header h3 {
   font-size: 1rem;
   font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.visualizador-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 #pdf-viewer {
@@ -1576,15 +1584,47 @@ textarea.form-input {
   border-radius: var(--radius-sm);
   background: var(--surface2);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding: 16px;
 }
 
 #pdf-canvas {
-  width: 100%;
+  max-width: 100%;
+  height: auto;
   margin: 0 auto;
   display: block;
   background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.modal-visualizador:fullscreen,
+.modal-visualizador.pdf-fullscreen-fallback {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  padding: 16px;
+  background: var(--bg);
+}
+
+.modal-visualizador.pdf-fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+}
+
+.modal-visualizador:fullscreen #pdf-viewer,
+.modal-visualizador.pdf-fullscreen-fallback #pdf-viewer {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.modal-visualizador:fullscreen .visualizador-header,
+.modal-visualizador.pdf-fullscreen-fallback .visualizador-header,
+.modal-visualizador:fullscreen .visualizador-controls,
+.modal-visualizador.pdf-fullscreen-fallback .visualizador-controls {
+  flex-shrink: 0;
 }
 
 .visualizador-controls {
@@ -1623,8 +1663,20 @@ textarea.form-input {
   .documentos-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
+  .visualizador-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .visualizador-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
   #pdf-viewer {
     height: 400px;
+  }
+  .modal-visualizador:fullscreen #pdf-viewer,
+  .modal-visualizador.pdf-fullscreen-fallback #pdf-viewer {
+    height: auto;
   }
   .visualizador-controls {
     flex-direction: column;
