@@ -1,110 +1,166 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Sistema interno de controle de estoque para equipe de manutenção — gerencie materiais, retiradas e cadastros com facilidade.">
-  <title>StockManager — Controle de Estoque</title>
-  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-  <link rel="stylesheet" href="css/style.css?v=20260505-2">
-</head>
-<body class="auth-active">
-  <section id="auth-screen" class="auth-screen">
-    <div class="auth-panel">
-      <div class="auth-brand">
-        <div class="logo-icon"><img src="assets/logo.svg" alt=""></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Sistema interno de controle de estoque para equipe de manutenção — gerencie materiais, retiradas e cadastros com facilidade."
+    />
+    <title>StockManager — Controle de Estoque</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+    <link rel="stylesheet" href="css/style.css?v=20260505-2" />
+  </head>
+  <body class="auth-active">
+    <section id="auth-screen" class="auth-screen">
+      <div class="auth-panel">
+        <div class="auth-brand">
+          <div class="logo-icon"><img src="assets/logo.svg" alt="" /></div>
+          <div>
+            <div class="logo-text">StockManager</div>
+            <div class="logo-sub">Acesso ao controle interno</div>
+          </div>
+        </div>
+        <form id="auth-form" class="auth-form">
+          <div class="form-group">
+            <label>E-mail</label>
+            <input
+              type="email"
+              id="auth-email"
+              class="form-input"
+              autocomplete="email"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label>Senha</label>
+            <input
+              type="password"
+              id="auth-password"
+              class="form-input"
+              autocomplete="current-password"
+              required
+              minlength="6"
+            />
+          </div>
+          <button
+            class="btn btn-primary auth-submit"
+            type="submit"
+            id="auth-submit"
+          >
+            Entrar
+          </button>
+          <button
+            class="btn btn-ghost auth-submit"
+            type="button"
+            id="auth-register"
+          >
+            Criar acesso
+          </button>
+          <p class="auth-privacy">
+            Uso interno. Acesse apenas com credenciais próprias; os registros
+            são vinculados ao usuário autenticado.
+          </p>
+          <p id="auth-message" class="auth-message"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Overlay mobile -->
+    <div id="sidebar-overlay"></div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon"><img src="assets/logo.svg" alt="" /></div>
         <div>
           <div class="logo-text">StockManager</div>
-          <div class="logo-sub">Acesso ao controle interno</div>
+          <div class="logo-sub">Manutenção Interna</div>
         </div>
       </div>
-      <form id="auth-form" class="auth-form">
-        <div class="form-group">
-          <label>E-mail</label>
-          <input type="email" id="auth-email" class="form-input" autocomplete="email" required>
+      <ul id="nav-links"></ul>
+      <div class="sidebar-footer">v1.0 · Controle interno</div>
+    </aside>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div id="main-wrapper">
+      <header id="app-header">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <button id="sidebar-toggle">☰</button>
+          <h1 id="page-title">Dashboard</h1>
         </div>
-        <div class="form-group">
-          <label>Senha</label>
-          <input type="password" id="auth-password" class="form-input" autocomplete="current-password" required minlength="6">
+        <div class="header-right">
+          <button
+            class="btn btn-ghost btn-sm"
+            id="backup-export"
+            title="Exportar cópia dos dados"
+          >
+            Exportar
+          </button>
+          <button
+            class="btn btn-ghost btn-sm"
+            id="backup-import"
+            title="Importar cópia dos dados"
+          >
+            Importar
+          </button>
+          <input
+            type="file"
+            id="backup-file"
+            accept="application/json"
+            hidden
+          />
+          <span class="header-badge" id="session-user">Online</span>
+          <button
+            class="btn btn-ghost btn-sm"
+            id="logout-btn"
+            title="Encerrar acesso"
+          >
+            Sair
+          </button>
         </div>
-        <button class="btn btn-primary auth-submit" type="submit" id="auth-submit">Entrar</button>
-        <button class="btn btn-ghost auth-submit" type="button" id="auth-register">Criar acesso</button>
-        <p class="auth-privacy">Uso interno. Acesse apenas com credenciais próprias; os registros são vinculados ao usuário autenticado.</p>
-        <p id="auth-message" class="auth-message"></p>
-      </form>
+      </header>
+
+      <main id="main-content"></main>
     </div>
-  </section>
 
-  <!-- Overlay mobile -->
-  <div id="sidebar-overlay"></div>
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon"><img src="assets/logo.svg" alt=""></div>
-      <div>
-        <div class="logo-text">StockManager</div>
-        <div class="logo-sub">Manutenção Interna</div>
-      </div>
-    </div>
-    <ul id="nav-links"></ul>
-    <div class="sidebar-footer">v1.0 · Controle interno</div>
-  </aside>
-
-  <!-- CONTEÚDO PRINCIPAL -->
-  <div id="main-wrapper">
-    <header id="app-header">
-      <div style="display:flex;align-items:center;gap:12px">
-        <button id="sidebar-toggle">☰</button>
-        <h1 id="page-title">Dashboard</h1>
-      </div>
-      <div class="header-right">
-        <button class="btn btn-ghost btn-sm" id="backup-export" title="Exportar cópia dos dados">Exportar</button>
-        <button class="btn btn-ghost btn-sm" id="backup-import" title="Importar cópia dos dados">Importar</button>
-        <input type="file" id="backup-file" accept="application/json" hidden>
-        <span class="header-badge" id="session-user">Online</span>
-        <button class="btn btn-ghost btn-sm" id="logout-btn" title="Encerrar acesso">Sair</button>
-      </div>
-    </header>
-
-    <main id="main-content"></main>
-  </div>
-
-  <!-- MODAL GLOBAL -->
-  <div id="modal-overlay">
-    <div id="modal-box">
-      <div id="modal-header">
-        <span id="modal-title">Modal</span>
-        <button id="modal-close">✕</button>
-      </div>
-      <div id="modal-body"></div>
-      <div id="modal-footer">
-        <button id="modal-cancel" class="btn btn-ghost">Cancelar</button>
-        <button id="modal-confirm" class="btn btn-primary">Salvar</button>
+    <!-- MODAL GLOBAL -->
+    <div id="modal-overlay">
+      <div id="modal-box">
+        <div id="modal-header">
+          <span id="modal-title">Modal</span>
+          <button id="modal-close">✕</button>
+        </div>
+        <div id="modal-body"></div>
+        <div id="modal-footer">
+          <button id="modal-cancel" class="btn btn-ghost">Cancelar</button>
+          <button id="modal-confirm" class="btn btn-primary">Salvar</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- TOASTS -->
-  <div id="toasts"></div>
+    <!-- TOASTS -->
+    <div id="toasts"></div>
 
-  <!-- SCRIPTS (ordem importa) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || {
-      url: 'https://upkainwgfmxdyflivyhk.supabase.co',
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa2FpbndnZm14ZHlmbGl2eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjMzNDksImV4cCI6MjA5MzM5OTM0OX0.cqNho307eYTI0hWVhV33Vk69USBsyQnG-dyMJF3y9v8',
-      allowSignUp: false,
-    };
-  </script>
-  <script src="js/supabase.config.js?v=20260505-1"></script>
-  <script src="js/storage.js?v=20260505-1"></script>
-  <script src="js/dashboard.js?v=20260505-1"></script>
-  <script src="js/produtos.js?v=20260505-1"></script>
-  <script src="js/movimentacoes.js?v=20260505-1"></script>
-  <script src="js/pessoas.js?v=20260505-1"></script>
-  <script src="js/relatorios.js?v=20260505-1"></script>
-  <script src="js/app.js?v=20260505-1"></script>
-
-</body>
+    <!-- SCRIPTS (ordem importa) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || {
+        url: "https://upkainwgfmxdyflivyhk.supabase.co",
+        anonKey:
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa2FpbndnZm14ZHlmbGl2eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjMzNDksImV4cCI6MjA5MzM5OTM0OX0.cqNho307eYTI0hWVhV33Vk69USBsyQnG-dyMJF3y9v8",
+        allowSignUp: false,
+      };
+    </script>
+    <script src="js/supabase.config.js?v=20260505-1"></script>
+    <script src="js/ui.js?v=20260505-1"></script>
+    <script src="js/storage.js?v=20260505-1"></script>
+    <script src="js/dashboard.js?v=20260505-1"></script>
+    <script src="js/produtos.js?v=20260505-1"></script>
+    <script src="js/movimentacoes.js?v=20260505-1"></script>
+    <script src="js/pessoas.js?v=20260505-1"></script>
+    <script src="js/documentos.js?v=20260505-1"></script>
+    <script src="js/relatorios.js?v=20260505-1"></script>
+    <script src="js/app.js?v=20260505-1"></script>
+  </body>
 </html>
