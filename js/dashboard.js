@@ -139,7 +139,14 @@ const Dashboard = {
     const entries = Object.entries(catMap);
     if (entries.length === 0) return '<p class="empty-state-sm">Sem dados.</p>';
     const max = Math.max(...entries.map(([, v]) => v), 1);
-    const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6', '#f97316'];
+    const colors = [
+      'var(--primary)',
+      'var(--green)',
+      'var(--amber)',
+      'var(--red)',
+      'var(--blue)',
+      'var(--primary-soft)',
+    ];
     return entries.map(([cat, qty], i) => `
       <div class="bar-row">
         <div class="bar-label">${App.escapeHTML(cat)}</div>

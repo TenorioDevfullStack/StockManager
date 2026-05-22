@@ -1,22 +1,22 @@
 <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">StockManager</title>
   <desc id="desc">Logo com caixa de estoque e seta de controle</desc>
-  <rect width="160" height="160" rx="34" fill="#111827"/>
+  <rect width="160" height="160" rx="34" fill="#10120F"/>
   <rect x="14" y="14" width="132" height="132" rx="28" fill="url(#paint0_linear)"/>
   <path d="M80 37L116 56.5V97.5L80 118L44 97.5V56.5L80 37Z" fill="#F8FAFC"/>
-  <path d="M80 37L116 56.5L80 76.5L44 56.5L80 37Z" fill="#E0E7FF"/>
-  <path d="M44 56.5L80 76.5V118L44 97.5V56.5Z" fill="#C7D2FE"/>
-  <path d="M116 56.5L80 76.5V118L116 97.5V56.5Z" fill="#A5B4FC"/>
-  <path d="M63.5 47.5L99.5 67.5" stroke="#6366F1" stroke-width="6" stroke-linecap="round"/>
-  <path d="M58 92H78.5C88.165 92 96 84.165 96 74.5V70" stroke="#22C55E" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M86 78L96 68L106 78" stroke="#22C55E" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="115" cy="113" r="14" fill="#22C55E"/>
-  <path d="M108 113L113 118L123 108" stroke="#052E16" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M80 37L116 56.5L80 76.5L44 56.5L80 37Z" fill="#DDF7EF"/>
+  <path d="M44 56.5L80 76.5V118L44 97.5V56.5Z" fill="#99F6E4"/>
+  <path d="M116 56.5L80 76.5V118L116 97.5V56.5Z" fill="#5EEAD4"/>
+  <path d="M63.5 47.5L99.5 67.5" stroke="#0F766E" stroke-width="6" stroke-linecap="round"/>
+  <path d="M58 92H78.5C88.165 92 96 84.165 96 74.5V70" stroke="#84CC16" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M86 78L96 68L106 78" stroke="#84CC16" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="115" cy="113" r="14" fill="#84CC16"/>
+  <path d="M108 113L113 118L123 108" stroke="#1A2E05" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
   <defs>
     <linearGradient id="paint0_linear" x1="28" y1="24" x2="136" y2="144" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6366F1"/>
-      <stop offset="0.52" stop-color="#3B82F6"/>
-      <stop offset="1" stop-color="#22C55E"/>
+      <stop stop-color="#0F766E"/>
+      <stop offset="0.52" stop-color="#0284C7"/>
+      <stop offset="1" stop-color="#84CC16"/>
     </linearGradient>
   </defs>
 </svg>

@@ -210,7 +210,7 @@ const Documentos = {
               <button type="button" data-doc-action="visualizar" data-doc-id="${docId}">👁️ Visualizar</button>
               <button type="button" data-doc-action="descarregar" data-doc-id="${docId}" data-doc-name="${docNome}">⬇️ Descarregar</button>
               <button type="button" data-doc-action="editar" data-doc-id="${docId}">✏️ Editar</button>
-              <button type="button" data-doc-action="deletar" data-doc-id="${docId}" style="color: #ff6b6b;">🗑️ Deletar</button>
+              <button type="button" class="dropdown-danger" data-doc-action="deletar" data-doc-id="${docId}">🗑️ Deletar</button>
             </div>
           </div>
         </div>
