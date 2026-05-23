@@ -4,8 +4,19 @@
 
 const Documentos = {
   docs: [],
-  filtroAtual: "geral",
+  filtroAtual: "todos",
   pdfJsLoaded: false,
+  tipoManualValue: "__manual__",
+  tiposBase: [
+    { valor: "geral", rotulo: "Geral", filtro: "Geral" },
+    { valor: "manual", rotulo: "Manual", filtro: "Manuais" },
+    {
+      valor: "especificacao",
+      rotulo: "Especificação",
+      filtro: "Especificações",
+    },
+    { valor: "certificado", rotulo: "Certificado", filtro: "Certificados" },
+  ],
 
   async render() {
     if (!this.pdfJsLoaded) {
@@ -22,18 +33,9 @@ const Documentos = {
         </div>
 
         <div class="documentos-filtros">
-          <button type="button" class="filtro-btn ${this.filtroAtual === "geral" ? "ativo" : ""}" data-doc-action="filter" data-filter="geral">
-            Todos
-          </button>
-          <button type="button" class="filtro-btn ${this.filtroAtual === "manual" ? "ativo" : ""}" data-doc-action="filter" data-filter="manual">
-            Manuais
-          </button>
-          <button type="button" class="filtro-btn ${this.filtroAtual === "especificacao" ? "ativo" : ""}" data-doc-action="filter" data-filter="especificacao">
-            Especificações
-          </button>
-          <button type="button" class="filtro-btn ${this.filtroAtual === "certificado" ? "ativo" : ""}" data-doc-action="filter" data-filter="certificado">
-            Certificados
-          </button>
+          <div class="documentos-filtro-botoes" id="docs-filter-buttons">
+            ${this.renderBotoesFiltro()}
+          </div>
           <input type="text" id="busca-docs" placeholder="Buscar documentos..." class="search-input">
         </div>
 
@@ -67,7 +69,7 @@ const Documentos = {
       if (action === "upload") {
         this.abrirModalUpload();
       } else if (action === "filter") {
-        this.filtrar(actionEl.dataset.filter || "geral", event);
+        this.filtrar(actionEl.dataset.filter || "todos", event);
       } else if (action === "menu") {
         this.abrirMenu(event, docId);
       } else if (action === "visualizar") {
@@ -114,7 +116,10 @@ const Documentos = {
   },
 
   async listar() {
-    this.docs = DB.getDocumentos?.() || [];
+    this.docs = (DB.getDocumentos?.() || []).map((doc) =>
+      this.normalizarDocumento(doc),
+    );
+    this.atualizarFiltros();
     this.renderGrid();
 
     if (!DB.remoteReady || !DB.user) return;
@@ -129,6 +134,7 @@ const Documentos = {
       if (error) throw error;
       this.docs = (data || []).map((doc) => this.normalizarDocumento(doc));
       DB.setDocumentos?.(this.docs);
+      this.atualizarFiltros();
       this.renderGrid();
     } catch (error) {
       console.error("Erro ao listar documentos:", error);
@@ -141,12 +147,9 @@ const Documentos = {
   },
 
   filtrar(tipo, event) {
-    this.filtroAtual = tipo;
+    this.filtroAtual = tipo || "todos";
     this.renderGrid();
-    document.querySelectorAll(".filtro-btn").forEach((btn) => {
-      btn.classList.remove("ativo");
-    });
-    event?.target?.classList.add("ativo");
+    this.atualizarFiltros();
   },
 
   buscar(termo) {
@@ -156,10 +159,11 @@ const Documentos = {
     }
 
     const termoLower = termo.toLowerCase();
-    const filtrados = this.docs.filter(
+    const filtrados = this.aplicarFiltroTipo(this.docs).filter(
       (doc) =>
         doc.nome.toLowerCase().includes(termoLower) ||
         (doc.descricao && doc.descricao.toLowerCase().includes(termoLower)) ||
+        this.rotuloTipo(doc.tipo_documento).toLowerCase().includes(termoLower) ||
         (doc.tags &&
           doc.tags.some((t) => t.toLowerCase().includes(termoLower))),
     );
@@ -168,11 +172,7 @@ const Documentos = {
   },
 
   renderGrid() {
-    let docs = this.docs;
-
-    if (this.filtroAtual !== "geral") {
-      docs = docs.filter((d) => d.tipo_documento === this.filtroAtual);
-    }
+    const docs = this.aplicarFiltroTipo(this.docs);
 
     const grid = document.getElementById("docs-grid");
     if (!grid) return;
@@ -203,7 +203,7 @@ const Documentos = {
     return `
       <div class="doc-card">
         <div class="doc-header">
-          <div class="doc-tipo">${this.sanitize(doc.tipo_documento)}</div>
+          <div class="doc-tipo">${this.sanitize(this.rotuloTipo(doc.tipo_documento))}</div>
           <div class="doc-menu">
             <button type="button" class="btn-icon" data-doc-action="menu" data-doc-id="${docId}">⋮</button>
             <div class="dropdown-menu" id="menu-${docId}" style="display:none;">
@@ -267,11 +267,10 @@ const Documentos = {
           <div class="form-group">
             <label>Tipo de Documento*</label>
             <select id="doc-tipo" required class="form-input">
-              <option value="geral">Geral</option>
-              <option value="manual">Manual</option>
-              <option value="especificacao">Especificação</option>
-              <option value="certificado">Certificado</option>
+              ${this.renderOpcoesTipo()}
+              <option value="${this.tipoManualValue}">Outro tipo...</option>
             </select>
+            <input type="text" id="doc-tipo-manual" class="form-input doc-tipo-manual" placeholder="Digite o tipo do documento" maxlength="60" hidden>
           </div>
 
           <div class="form-group">
@@ -305,6 +304,7 @@ const Documentos = {
     document
       .getElementById("doc-arquivo")
       ?.addEventListener("change", (event) => this.previewArquivo(event.target));
+    this.bindTipoManual("doc-tipo", "doc-tipo-manual");
     document
       .querySelector("[data-doc-modal-cancel]")
       ?.addEventListener("click", () => UI.closeModal());
@@ -330,9 +330,14 @@ const Documentos = {
 
     const nome = document.getElementById("doc-nome").value.trim();
     const descricao = document.getElementById("doc-descricao").value.trim();
-    const tipo = document.getElementById("doc-tipo").value;
+    const tipo = this.obterTipoFormulario("doc-tipo", "doc-tipo-manual");
     const arquivo = document.getElementById("doc-arquivo").files[0];
     const tagsStr = document.getElementById("doc-tags").value;
+
+    if (!tipo) {
+      UI.toast("Informe o tipo de documento.", "error");
+      return;
+    }
 
     if (!this.ehPDF(arquivo)) {
       UI.toast("Por favor, selecione um arquivo PDF válido", "error");
@@ -356,7 +361,7 @@ const Documentos = {
     try {
       // Gerar caminho único para o arquivo
       const timestamp = Date.now();
-      caminhoArquivo = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+      caminhoArquivo = `${DB.user.id}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
       // Fazer upload para Supabase Storage
       const { error: uploadError } = await DB.supabase.storage
@@ -764,11 +769,10 @@ const Documentos = {
           <div class="form-group">
             <label>Tipo</label>
             <select id="edit-tipo" class="form-input">
-              <option value="geral" ${doc.tipo_documento === "geral" ? "selected" : ""}>Geral</option>
-              <option value="manual" ${doc.tipo_documento === "manual" ? "selected" : ""}>Manual</option>
-              <option value="especificacao" ${doc.tipo_documento === "especificacao" ? "selected" : ""}>Especificação</option>
-              <option value="certificado" ${doc.tipo_documento === "certificado" ? "selected" : ""}>Certificado</option>
+              ${this.renderOpcoesTipo(doc.tipo_documento)}
+              <option value="${this.tipoManualValue}">Outro tipo...</option>
             </select>
+            <input type="text" id="edit-tipo-manual" class="form-input doc-tipo-manual" placeholder="Digite o tipo do documento" maxlength="60" hidden>
           </div>
 
           <div class="form-group">
@@ -804,6 +808,7 @@ const Documentos = {
       ?.addEventListener("change", (event) =>
         this.previewArquivo(event.target, "edit-file-name"),
       );
+    this.bindTipoManual("edit-tipo", "edit-tipo-manual");
     document
       .querySelector("[data-doc-modal-cancel]")
       ?.addEventListener("click", () => UI.closeModal());
@@ -825,9 +830,14 @@ const Documentos = {
 
     const nome = document.getElementById("edit-nome").value.trim();
     const descricao = document.getElementById("edit-descricao").value.trim();
-    const tipo = document.getElementById("edit-tipo").value;
+    const tipo = this.obterTipoFormulario("edit-tipo", "edit-tipo-manual");
     const tagsStr = document.getElementById("edit-tags").value;
     const novoArquivo = document.getElementById("edit-arquivo")?.files[0];
+
+    if (!tipo) {
+      UI.toast("Informe o tipo de documento.", "error");
+      return;
+    }
 
     const tags = tagsStr
       .split(",")
@@ -864,7 +874,7 @@ const Documentos = {
 
       if (novoArquivo) {
         const timestamp = Date.now();
-        novoCaminho = `${DB.user.id}/${tipo}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+        novoCaminho = `${DB.user.id}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
         const { error: uploadError } = await DB.supabase.storage
           .from("documentos")
@@ -989,6 +999,170 @@ const Documentos = {
     return this.sanitize(String(value ?? ""));
   },
 
+  renderBotoesFiltro() {
+    const botaoTodos = `
+      <button type="button" class="filtro-btn ${this.filtroAtual === "todos" ? "ativo" : ""}" data-doc-action="filter" data-filter="todos">
+        Todos
+      </button>
+    `;
+
+    return (
+      botaoTodos +
+      this.obterTiposDocumento()
+        .map(
+          (tipo) => `
+            <button type="button" class="filtro-btn ${this.filtroEstaAtivo(tipo.valor) ? "ativo" : ""}" data-doc-action="filter" data-filter="${this.attr(tipo.valor)}">
+              ${this.sanitize(tipo.filtro || tipo.rotulo)}
+            </button>
+          `,
+        )
+        .join("")
+    );
+  },
+
+  atualizarFiltros() {
+    const container = document.getElementById("docs-filter-buttons");
+    if (container) {
+      container.innerHTML = this.renderBotoesFiltro();
+    }
+  },
+
+  filtroEstaAtivo(tipo) {
+    return (
+      this.filtroAtual !== "todos" &&
+      this.chaveTipo(this.filtroAtual) === this.chaveTipo(tipo)
+    );
+  },
+
+  aplicarFiltroTipo(docs) {
+    if (this.filtroAtual === "todos") return docs;
+    const filtroChave = this.chaveTipo(this.filtroAtual);
+    return docs.filter(
+      (doc) => this.chaveTipo(this.normalizarTipoDocumento(doc.tipo_documento)) === filtroChave,
+    );
+  },
+
+  obterTiposDocumento(tipoExtra = "") {
+    const tipos = new Map();
+    const chavesUsadas = new Set();
+    this.tiposBase.forEach((tipo) => tipos.set(tipo.valor, { ...tipo }));
+    this.tiposBase.forEach((tipo) => chavesUsadas.add(this.chaveTipo(tipo.valor)));
+
+    [...this.docs, { tipo_documento: tipoExtra }].forEach((doc) => {
+      const valor = this.normalizarTipoDocumento(doc?.tipo_documento);
+      const chave = this.chaveTipo(valor);
+      if (!valor || chavesUsadas.has(chave)) return;
+      chavesUsadas.add(chave);
+      tipos.set(valor, {
+        valor,
+        rotulo: this.rotuloTipo(valor),
+        filtro: this.rotuloTipo(valor),
+      });
+    });
+
+    const baseValores = new Set(this.tiposBase.map((tipo) => tipo.valor));
+    const base = [];
+    const personalizados = [];
+
+    tipos.forEach((tipo) => {
+      if (baseValores.has(tipo.valor)) {
+        base.push(tipo);
+      } else {
+        personalizados.push(tipo);
+      }
+    });
+
+    personalizados.sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"));
+    return [...base, ...personalizados];
+  },
+
+  renderOpcoesTipo(tipoSelecionado = "geral") {
+    const selecionado = this.normalizarTipoDocumento(tipoSelecionado || "geral");
+    const chaveSelecionada = this.chaveTipo(selecionado);
+    return this.obterTiposDocumento(selecionado)
+      .map(
+        (tipo) => `
+          <option value="${this.attr(tipo.valor)}" ${this.chaveTipo(tipo.valor) === chaveSelecionada ? "selected" : ""}>
+            ${this.sanitize(tipo.rotulo)}
+          </option>
+        `,
+      )
+      .join("");
+  },
+
+  bindTipoManual(selectId, inputId) {
+    const select = document.getElementById(selectId);
+    const input = document.getElementById(inputId);
+    if (!select || !input) return;
+
+    const atualizar = () => {
+      const manual = select.value === this.tipoManualValue;
+      input.hidden = !manual;
+      input.required = manual;
+      if (manual) {
+        input.focus();
+      } else {
+        input.value = "";
+      }
+    };
+
+    select.addEventListener("change", atualizar);
+    atualizar();
+  },
+
+  obterTipoFormulario(selectId, inputId) {
+    const select = document.getElementById(selectId);
+    const input = document.getElementById(inputId);
+    const valor =
+      select?.value === this.tipoManualValue ? input?.value : select?.value;
+    return this.normalizarTipoDocumento(valor);
+  },
+
+  normalizarTipoDocumento(tipo) {
+    const valor = String(tipo || "")
+      .replace(/[\\/]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 60);
+
+    if (!valor) return "";
+
+    const chave = this.chaveTipo(valor);
+    const tipoBase = this.tiposBase.find(
+      (item) =>
+        this.chaveTipo(item.valor) === chave ||
+        this.chaveTipo(item.rotulo) === chave,
+    );
+
+    return tipoBase?.valor || valor;
+  },
+
+  chaveTipo(tipo) {
+    return String(tipo || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+  },
+
+  rotuloTipo(tipo) {
+    const valor = String(tipo || "").trim();
+    if (!valor) return "Geral";
+
+    const chave = this.chaveTipo(valor);
+    const tipoBase = this.tiposBase.find(
+      (item) =>
+        this.chaveTipo(item.valor) === chave ||
+        this.chaveTipo(item.rotulo) === chave,
+    );
+    if (tipoBase) return tipoBase.rotulo;
+
+    const texto = valor.replace(/[_-]+/g, " ");
+    if (texto !== texto.toLowerCase()) return texto;
+
+    return texto.replace(/\b\w/g, (letra) => letra.toUpperCase());
+  },
+
   encontrarDocumento(docId) {
     return this.docs.find((doc) => String(doc.id) === String(docId));
   },
@@ -1001,7 +1175,7 @@ const Documentos = {
       descricao: doc.descricao || "",
       arquivo_url: doc.arquivo_url || "",
       arquivo_caminho: doc.arquivo_caminho || "",
-      tipo_documento: doc.tipo_documento || "geral",
+      tipo_documento: this.normalizarTipoDocumento(doc.tipo_documento) || "geral",
       produto_id: doc.produto_id || null,
       tags: Array.isArray(doc.tags) ? doc.tags : [],
       criado_em: doc.criado_em || new Date().toISOString(),
@@ -1016,12 +1190,20 @@ const Documentos = {
       ...this.docs.filter((item) => String(item.id) !== String(normalizado.id)),
     ].sort((a, b) => new Date(b.criado_em || 0) - new Date(a.criado_em || 0));
     DB.saveDocumentoCache?.(normalizado);
+    this.atualizarFiltros();
     this.renderGrid();
   },
 
   removerDocumentoLocal(docId) {
     this.docs = this.docs.filter((doc) => String(doc.id) !== String(docId));
     DB.deleteDocumentoCache?.(docId);
+    if (
+      this.filtroAtual !== "todos" &&
+      !this.docs.some((doc) => this.filtroEstaAtivo(doc.tipo_documento))
+    ) {
+      this.filtroAtual = "todos";
+    }
+    this.atualizarFiltros();
     this.renderGrid();
   },
 };

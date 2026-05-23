@@ -1322,6 +1322,12 @@ textarea.form-input {
   flex-wrap: wrap;
   align-items: center;
 }
+.documentos-filtro-botoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 .filtro-btn {
   background: var(--surface2);
   border: 1px solid var(--border);

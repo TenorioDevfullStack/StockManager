@@ -10,7 +10,7 @@ Foi implementado um sistema completo de gerenciamento de arquivos PDF no StockMa
 - ✅ Download de PDFs
 - ✅ Edição de metadados (nome, descrição, tipo, tags)
 - ✅ Deleção de documentos
-- ✅ Filtros por tipo de documento
+- ✅ Filtros por tipo de documento, incluindo tipos adicionados manualmente
 - ✅ Busca por termo
 - ✅ Interface responsiva e moderna
 
@@ -98,7 +98,7 @@ Você pode executar isso:
 3. Preencha os dados:
    - **Nome do Documento** (obrigatório)
    - **Descrição** (opcional)
-   - **Tipo de Documento**: Geral, Manual, Especificação ou Certificado
+   - **Tipo de Documento**: Geral, Manual, Especificação, Certificado ou **Outro tipo...** para informar um tipo manualmente
    - **Arquivo PDF** (máximo 50MB)
    - **Tags** (opcional, separadas por vírgula)
 4. Clique em **"Enviar PDF"**
@@ -120,7 +120,7 @@ Você pode executar isso:
 
 ### Filtros e Busca
 
-- **Botões de Filtro**: Filtre por tipo de documento (Todos, Manuais, Especificações, Certificados)
+- **Botões de Filtro**: Filtre por tipo de documento. Tipos manuais passam a aparecer como filtros automaticamente após serem salvos.
 - **Campo de Busca**: Digite para buscar por nome, descrição ou tags
 
 ### Deletar Documento
@@ -140,7 +140,7 @@ Você pode executar isso:
 - descricao: TEXT (descrição opcional)
 - arquivo_url: TEXT (URL pública do arquivo no Storage)
 - arquivo_caminho: TEXT (caminho interno no Storage)
-- tipo_documento: TEXT (geral, manual, especificacao, certificado)
+- tipo_documento: TEXT (geral, manual, especificacao, certificado ou tipo informado manualmente)
 - produto_id: UUID (opcional, referência para produto)
 - tags: TEXT[] (array de tags)
 - criado_em: TIMESTAMPTZ (data de criação)
@@ -202,11 +202,7 @@ Você pode executar isso:
 
 ### Adicionar mais tipos de documentos
 
-Edite o arquivo `documentos.js` na seção `abrirModalUpload()`:
-
-```javascript
-<option value="novo_tipo">Novo Tipo</option>
-```
+No formulário de upload ou edição, selecione **"Outro tipo..."** no campo **Tipo de Documento** e informe o nome desejado. O novo tipo fica salvo no documento e aparece automaticamente nos filtros.
 
 ### Modificar limite de tamanho
 
