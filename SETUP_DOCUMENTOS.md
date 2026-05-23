@@ -9,6 +9,7 @@ Foi implementado um sistema completo de gerenciamento de arquivos PDF no StockMa
 - ✅ Visualização de PDFs no navegador com navegação por páginas
 - ✅ Download de PDFs
 - ✅ Edição de metadados (nome, descrição, tipo, tags)
+- ✅ Movimentação em lote para alterar o tipo de múltiplos documentos
 - ✅ Deleção de documentos
 - ✅ Filtros por tipo de documento, incluindo tipos adicionados manualmente
 - ✅ Busca por termo
@@ -117,6 +118,13 @@ Você pode executar isso:
 2. Selecione **"✏️ Editar"**
 3. Modifique os dados desejados ou selecione outro PDF para substituir o arquivo atual
 4. Clique em **"Salvar"**
+
+### Mover Documentos em Lote
+
+1. Marque os documentos desejados usando o checkbox em cada card
+2. Clique em **"Mover selecionados"**
+3. Escolha o novo tipo de cada documento ou use **"Aplicar em todos"**
+4. Clique em **"Mover documentos"**
 
 ### Filtros e Busca
 

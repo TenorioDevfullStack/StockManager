@@ -4,7 +4,9 @@
 
 const Documentos = {
   docs: [],
+  selecionados: new Set(),
   filtroAtual: "todos",
+  buscaAtual: "",
   pdfJsLoaded: false,
   tipoManualValue: "__manual__",
   tiposBase: [
@@ -37,6 +39,19 @@ const Documentos = {
             ${this.renderBotoesFiltro()}
           </div>
           <input type="text" id="busca-docs" placeholder="Buscar documentos..." class="search-input">
+        </div>
+
+        <div class="documentos-lote-toolbar" id="docs-bulk-toolbar">
+          <span id="docs-selection-count">0 selecionados</span>
+          <button type="button" class="btn btn-sm btn-ghost" data-doc-action="select-visible">
+            Selecionar visíveis
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" data-doc-action="bulk-move" disabled>
+            Mover selecionados
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost" data-doc-action="clear-selection" disabled>
+            Limpar seleção
+          </button>
         </div>
 
         <div class="documentos-grid" id="docs-grid">
@@ -80,6 +95,22 @@ const Documentos = {
         this.editarDoc(docId);
       } else if (action === "deletar") {
         this.deletar(docId);
+      } else if (action === "select-visible") {
+        this.selecionarVisiveis();
+      } else if (action === "clear-selection") {
+        this.limparSelecao();
+      } else if (action === "bulk-move") {
+        this.abrirModalMoverSelecionados();
+      }
+    });
+
+    container.addEventListener("change", (event) => {
+      if (event.target.matches("[data-doc-select]")) {
+        this.alternarSelecao(
+          event.target.dataset.docId,
+          event.target.checked,
+          event.target,
+        );
       }
     });
 
@@ -119,6 +150,7 @@ const Documentos = {
     this.docs = (DB.getDocumentos?.() || []).map((doc) =>
       this.normalizarDocumento(doc),
     );
+    this.sincronizarSelecao();
     this.atualizarFiltros();
     this.renderGrid();
 
@@ -134,6 +166,7 @@ const Documentos = {
       if (error) throw error;
       this.docs = (data || []).map((doc) => this.normalizarDocumento(doc));
       DB.setDocumentos?.(this.docs);
+      this.sincronizarSelecao();
       this.atualizarFiltros();
       this.renderGrid();
     } catch (error) {
@@ -153,35 +186,40 @@ const Documentos = {
   },
 
   buscar(termo) {
-    if (!termo.trim()) {
-      this.renderGrid();
-      return;
-    }
+    this.buscaAtual = termo.trim().toLowerCase();
+    this.renderGrid();
+  },
 
-    const termoLower = termo.toLowerCase();
-    const filtrados = this.aplicarFiltroTipo(this.docs).filter(
+  obterDocsVisiveis() {
+    let docs = this.aplicarFiltroTipo(this.docs);
+
+    if (!this.buscaAtual) return docs;
+
+    docs = docs.filter(
       (doc) =>
-        doc.nome.toLowerCase().includes(termoLower) ||
-        (doc.descricao && doc.descricao.toLowerCase().includes(termoLower)) ||
-        this.rotuloTipo(doc.tipo_documento).toLowerCase().includes(termoLower) ||
+        doc.nome.toLowerCase().includes(this.buscaAtual) ||
+        (doc.descricao && doc.descricao.toLowerCase().includes(this.buscaAtual)) ||
+        this.rotuloTipo(doc.tipo_documento).toLowerCase().includes(this.buscaAtual) ||
         (doc.tags &&
-          doc.tags.some((t) => t.toLowerCase().includes(termoLower))),
+          doc.tags.some((t) => t.toLowerCase().includes(this.buscaAtual))),
     );
 
-    this.renderGridFiltered(filtrados);
+    return docs;
   },
 
   renderGrid() {
-    const docs = this.aplicarFiltroTipo(this.docs);
+    const docs = this.obterDocsVisiveis();
 
     const grid = document.getElementById("docs-grid");
     if (!grid) return;
     if (!docs.length) {
       grid.innerHTML = '<p class="empty-state">Nenhum documento encontrado</p>';
+      this.atualizarAcoesLote();
       return;
     }
 
     grid.innerHTML = docs.map((doc) => this.renderCard(doc)).join("");
+    this.atualizarAcoesLote();
   },
 
   renderGridFiltered(docs) {
@@ -189,9 +227,11 @@ const Documentos = {
     if (!grid) return;
     if (!docs.length) {
       grid.innerHTML = '<p class="empty-state">Nenhum documento encontrado</p>';
+      this.atualizarAcoesLote();
       return;
     }
     grid.innerHTML = docs.map((doc) => this.renderCard(doc)).join("");
+    this.atualizarAcoesLote();
   },
 
   renderCard(doc) {
@@ -199,11 +239,18 @@ const Documentos = {
     const dataFormatada = data.toLocaleDateString("pt-BR");
     const docId = this.attr(doc.id);
     const docNome = this.attr(doc.nome);
+    const selecionado = this.selecionados.has(String(doc.id));
 
     return `
-      <div class="doc-card">
+      <div class="doc-card ${selecionado ? "doc-card-selected" : ""}">
         <div class="doc-header">
-          <div class="doc-tipo">${this.sanitize(this.rotuloTipo(doc.tipo_documento))}</div>
+          <div class="doc-header-info">
+            <label class="doc-select" title="Selecionar documento">
+              <input type="checkbox" data-doc-select data-doc-id="${docId}" ${selecionado ? "checked" : ""}>
+              <span>Selecionar</span>
+            </label>
+            <div class="doc-tipo">${this.sanitize(this.rotuloTipo(doc.tipo_documento))}</div>
+          </div>
           <div class="doc-menu">
             <button type="button" class="btn-icon" data-doc-action="menu" data-doc-id="${docId}">⋮</button>
             <div class="dropdown-menu" id="menu-${docId}" style="display:none;">
@@ -985,6 +1032,258 @@ const Documentos = {
     }
   },
 
+  selecionarVisiveis() {
+    const docs = this.obterDocsVisiveis();
+    if (!docs.length) {
+      UI.toast("Nenhum documento visível para selecionar.", "info");
+      return;
+    }
+
+    docs.forEach((doc) => this.selecionados.add(String(doc.id)));
+    this.renderGrid();
+  },
+
+  alternarSelecao(docId, selecionado, input) {
+    if (!docId) return;
+
+    if (selecionado) {
+      this.selecionados.add(String(docId));
+    } else {
+      this.selecionados.delete(String(docId));
+    }
+
+    input?.closest(".doc-card")?.classList.toggle("doc-card-selected", selecionado);
+    this.atualizarAcoesLote();
+  },
+
+  limparSelecao(renderizar = true) {
+    this.selecionados.clear();
+    if (renderizar) {
+      this.renderGrid();
+    } else {
+      this.atualizarAcoesLote();
+    }
+  },
+
+  sincronizarSelecao() {
+    const ids = new Set(this.docs.map((doc) => String(doc.id)));
+    Array.from(this.selecionados).forEach((id) => {
+      if (!ids.has(id)) this.selecionados.delete(id);
+    });
+  },
+
+  obterDocumentosSelecionados() {
+    return this.docs.filter((doc) => this.selecionados.has(String(doc.id)));
+  },
+
+  atualizarAcoesLote() {
+    const total = this.selecionados.size;
+    const label = document.getElementById("docs-selection-count");
+    const moverBtn = document.querySelector('[data-doc-action="bulk-move"]');
+    const limparBtn = document.querySelector('[data-doc-action="clear-selection"]');
+    const selecionarBtn = document.querySelector('[data-doc-action="select-visible"]');
+
+    if (label) {
+      label.textContent = `${total} selecionado${total === 1 ? "" : "s"}`;
+    }
+    if (moverBtn) moverBtn.disabled = total === 0;
+    if (limparBtn) limparBtn.disabled = total === 0;
+    if (selecionarBtn) selecionarBtn.disabled = this.obterDocsVisiveis().length === 0;
+  },
+
+  abrirModalMoverSelecionados() {
+    const docs = this.obterDocumentosSelecionados();
+    if (!docs.length) {
+      UI.toast("Selecione ao menos um documento para mover.", "error");
+      return;
+    }
+
+    const linhas = docs
+      .map((doc, index) => {
+        const docId = this.attr(doc.id);
+        return `
+          <div class="doc-bulk-row">
+            <div class="doc-bulk-info">
+              <strong>${this.sanitize(doc.nome)}</strong>
+              <span>Atual: ${this.sanitize(this.rotuloTipo(doc.tipo_documento))}</span>
+            </div>
+            <div class="doc-bulk-type">
+              <select class="form-input" data-doc-move-type data-doc-id="${docId}" data-move-index="${index}">
+                ${this.renderOpcoesTipo(doc.tipo_documento)}
+                <option value="${this.tipoManualValue}">Outro tipo...</option>
+              </select>
+              <input type="text" class="form-input doc-tipo-manual" data-doc-move-manual data-move-index="${index}" placeholder="Digite o tipo do documento" maxlength="60" hidden>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    const modal = `
+      <div class="modal-mover-docs">
+        <h3>Mover documentos selecionados</h3>
+        <form id="form-mover-docs">
+          <div class="doc-bulk-apply">
+            <div class="form-group">
+              <label>Aplicar tipo em todos</label>
+              <select id="bulk-tipo-todos" class="form-input">
+                ${this.renderOpcoesTipo("", "Escolha um tipo")}
+                <option value="${this.tipoManualValue}">Outro tipo...</option>
+              </select>
+              <input type="text" id="bulk-tipo-todos-manual" class="form-input doc-tipo-manual" placeholder="Digite o tipo do documento" maxlength="60" hidden>
+            </div>
+            <button type="button" class="btn btn-ghost" data-doc-bulk-apply-type>Aplicar em todos</button>
+          </div>
+
+          <div class="doc-bulk-list">
+            ${linhas}
+          </div>
+
+          <div class="modal-buttons">
+            <button type="button" class="btn btn-ghost" data-doc-modal-cancel>Cancelar</button>
+            <button type="submit" class="btn btn-primary">Mover documentos</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    UI.openModal("Mover documentos", modal, false);
+    this.bindModalMoverSelecionados();
+  },
+
+  bindModalMoverSelecionados() {
+    this.bindTipoManual("bulk-tipo-todos", "bulk-tipo-todos-manual");
+
+    document.querySelectorAll("[data-doc-move-type]").forEach((select) => {
+      const input = document.querySelector(
+        `[data-doc-move-manual][data-move-index="${select.dataset.moveIndex}"]`,
+      );
+      this.bindTipoManualElement(select, input);
+    });
+
+    document
+      .querySelector("[data-doc-bulk-apply-type]")
+      ?.addEventListener("click", () => this.aplicarTipoEmTodos());
+    document
+      .getElementById("form-mover-docs")
+      ?.addEventListener("submit", (event) => this.moverDocumentosSelecionados(event));
+    document
+      .querySelector("[data-doc-modal-cancel]")
+      ?.addEventListener("click", () => UI.closeModal());
+  },
+
+  aplicarTipoEmTodos() {
+    const selectTodos = document.getElementById("bulk-tipo-todos");
+    const inputTodos = document.getElementById("bulk-tipo-todos-manual");
+    const tipo = this.obterTipoFormulario("bulk-tipo-todos", "bulk-tipo-todos-manual");
+
+    if (!tipo) {
+      UI.toast("Escolha ou informe um tipo para aplicar.", "error");
+      (selectTodos?.value === this.tipoManualValue ? inputTodos : selectTodos)?.focus();
+      return;
+    }
+
+    const usarManual = selectTodos?.value === this.tipoManualValue;
+    document.querySelectorAll("[data-doc-move-type]").forEach((select) => {
+      const input = document.querySelector(
+        `[data-doc-move-manual][data-move-index="${select.dataset.moveIndex}"]`,
+      );
+
+      if (usarManual) {
+        select.value = this.tipoManualValue;
+        if (input) input.value = inputTodos?.value.trim() || "";
+      } else {
+        select.value = tipo;
+        if (input) input.value = "";
+      }
+
+      this.atualizarCampoTipoManual(select, input, false);
+    });
+  },
+
+  async moverDocumentosSelecionados(event) {
+    event.preventDefault();
+
+    if (!DB.remoteReady || !DB.user?.id) {
+      UI.toast("Faça login para mover documentos.", "error");
+      return;
+    }
+
+    const itens = [];
+    for (const select of document.querySelectorAll("[data-doc-move-type]")) {
+      const input = document.querySelector(
+        `[data-doc-move-manual][data-move-index="${select.dataset.moveIndex}"]`,
+      );
+      const doc = this.encontrarDocumento(select.dataset.docId);
+      const tipo = this.normalizarTipoDocumento(
+        select.value === this.tipoManualValue ? input?.value : select.value,
+      );
+
+      if (!tipo) {
+        UI.toast("Informe o tipo para todos os documentos selecionados.", "error");
+        input?.focus();
+        return;
+      }
+      if (doc) itens.push({ doc, tipo });
+    }
+
+    const alteracoes = itens.filter(
+      ({ doc, tipo }) => this.chaveTipo(doc.tipo_documento) !== this.chaveTipo(tipo),
+    );
+
+    if (!alteracoes.length) {
+      UI.toast("Nenhum documento precisa ser movido.", "info");
+      return;
+    }
+
+    const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
+    const loading = UI.toast("Movendo documentos...", "loading");
+    let movidos = 0;
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Movendo...";
+    }
+
+    try {
+      for (const { doc, tipo } of alteracoes) {
+        const payload = {
+          tipo_documento: tipo,
+          atualizado_em: new Date().toISOString(),
+        };
+        const { data: docSalvo, error } = await DB.supabase
+          .from("documentos")
+          .update(payload)
+          .eq("id", doc.id)
+          .eq("user_id", DB.user.id)
+          .select("*")
+          .single();
+
+        if (error) throw error;
+        movidos += 1;
+        this.salvarDocumentoLocal(docSalvo || { ...doc, ...payload });
+      }
+
+      UI.closeModal();
+      UI.closeToast(loading);
+      this.limparSelecao(false);
+      UI.toast(
+        `${movidos} documento${movidos === 1 ? "" : "s"} movido${movidos === 1 ? "" : "s"} com sucesso!`,
+        "success",
+      );
+      await this.listar();
+    } catch (error) {
+      console.error("Erro ao mover documentos:", error);
+      UI.closeToast(loading);
+      UI.toast("Erro ao mover documentos: " + (error?.message || "falha ao salvar tipos."), "error");
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Mover documentos";
+      }
+    }
+  },
+
   sanitize(text) {
     const div = document.createElement("div");
     div.textContent = text;
@@ -1076,18 +1375,28 @@ const Documentos = {
     return [...base, ...personalizados];
   },
 
-  renderOpcoesTipo(tipoSelecionado = "geral") {
-    const selecionado = this.normalizarTipoDocumento(tipoSelecionado || "geral");
+  renderOpcoesTipo(tipoSelecionado = "geral", placeholder = "") {
+    const selecionado =
+      tipoSelecionado === ""
+        ? ""
+        : this.normalizarTipoDocumento(tipoSelecionado || "geral");
     const chaveSelecionada = this.chaveTipo(selecionado);
-    return this.obterTiposDocumento(selecionado)
-      .map(
-        (tipo) => `
-          <option value="${this.attr(tipo.valor)}" ${this.chaveTipo(tipo.valor) === chaveSelecionada ? "selected" : ""}>
-            ${this.sanitize(tipo.rotulo)}
-          </option>
-        `,
-      )
-      .join("");
+    const opcaoPlaceholder = placeholder
+      ? `<option value="" ${!selecionado ? "selected" : ""}>${this.sanitize(placeholder)}</option>`
+      : "";
+
+    return (
+      opcaoPlaceholder +
+      this.obterTiposDocumento(selecionado)
+        .map(
+          (tipo) => `
+            <option value="${this.attr(tipo.valor)}" ${chaveSelecionada && this.chaveTipo(tipo.valor) === chaveSelecionada ? "selected" : ""}>
+              ${this.sanitize(tipo.rotulo)}
+            </option>
+          `,
+        )
+        .join("")
+    );
   },
 
   bindTipoManual(selectId, inputId) {
@@ -1095,19 +1404,29 @@ const Documentos = {
     const input = document.getElementById(inputId);
     if (!select || !input) return;
 
-    const atualizar = () => {
-      const manual = select.value === this.tipoManualValue;
-      input.hidden = !manual;
-      input.required = manual;
-      if (manual) {
-        input.focus();
-      } else {
-        input.value = "";
-      }
-    };
+    this.bindTipoManualElement(select, input);
+  },
+
+  bindTipoManualElement(select, input) {
+    if (!select || !input) return;
+
+    const atualizar = () => this.atualizarCampoTipoManual(select, input);
 
     select.addEventListener("change", atualizar);
     atualizar();
+  },
+
+  atualizarCampoTipoManual(select, input, focarManual = true) {
+    if (!select || !input) return;
+
+    const manual = select.value === this.tipoManualValue;
+    input.hidden = !manual;
+    input.required = manual;
+    if (manual) {
+      if (focarManual) input.focus();
+    } else {
+      input.value = "";
+    }
   },
 
   obterTipoFormulario(selectId, inputId) {
