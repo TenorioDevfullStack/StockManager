@@ -19,7 +19,7 @@ Foi implementado um sistema completo de gerenciamento de arquivos PDF no StockMa
 
 ### 1. Configurar Supabase Storage
 
-O projeto inclui a migration `supabase/migrations/20260521001000_create_documents_storage_bucket.sql`, que cria o bucket `documentos` e as políticas de upload, leitura e remoção no Supabase Storage.
+O projeto inclui a migration `supabase/migrations/20260521001000_create_documents_storage_bucket.sql`, que cria o bucket privado `documentos` e as políticas de upload, leitura, edição e remoção no Supabase Storage.
 
 Se preferir configurar manualmente pelo Dashboard, use os passos abaixo:
 
@@ -34,7 +34,7 @@ Se preferir configurar manualmente pelo Dashboard, use os passos abaixo:
 1. Clique em **"New bucket"**
 2. Configure assim:
    - **Name:** `documentos`
-   - **Public bucket:** ☑️ (marque a opção para permitir acesso público)
+   - **Public bucket:** deixe desmarcado
 3. Clique em **"Create bucket"**
 
 #### Passo 3: Configurar Políticas de Acesso (RLS)
@@ -54,7 +54,14 @@ on storage.objects for select
 to authenticated
 using (bucket_id = 'documentos' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- Policy 3: Usuários podem deletar apenas seus arquivos
+-- Policy 3: Usuários podem atualizar apenas seus arquivos
+create policy "Usuários podem atualizar seus arquivos"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'documentos' and (storage.foldername(name))[1] = auth.uid()::text)
+with check (bucket_id = 'documentos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Policy 4: Usuários podem deletar apenas seus arquivos
 create policy "Usuários podem deletar seus arquivos"
 on storage.objects for delete
 to authenticated
@@ -146,7 +153,7 @@ Você pode executar isso:
 - user_id: UUID (referência ao usuário autenticado)
 - nome: TEXT (nome do documento)
 - descricao: TEXT (descrição opcional)
-- arquivo_url: TEXT (URL pública do arquivo no Storage)
+- arquivo_url: TEXT (caminho interno legado do arquivo no Storage)
 - arquivo_caminho: TEXT (caminho interno no Storage)
 - tipo_documento: TEXT (geral, manual, especificacao, certificado ou tipo informado manualmente)
 - produto_id: UUID (opcional, referência para produto)
@@ -191,12 +198,12 @@ Você pode executar isso:
 ### Erro: "Bucket not found"
 
 - Execute a migration `supabase/migrations/20260521001000_create_documents_storage_bucket.sql`
-- Ou crie manualmente um bucket público chamado `documentos` no Supabase Storage
-- Depois configure as políticas de Storage para permitir `insert`, `select` e `delete` na pasta do usuário autenticado
+- Ou crie manualmente um bucket privado chamado `documentos` no Supabase Storage
+- Depois configure as políticas de Storage para permitir `insert`, `select`, `update` e `delete` na pasta do usuário autenticado
 
 ### PDFs não aparecem
 
-- Confirme que o bucket é público
+- Confirme que o bucket é privado
 - Verifique se a migração SQL foi executada
 - Limpe o cache do navegador (Ctrl+Shift+Delete)
 

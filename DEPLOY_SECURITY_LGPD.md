@@ -7,11 +7,12 @@ Este projeto é um sistema interno de controle de estoque para equipe de manuten
 - Não publique o arquivo `.env`.
 - Não use `SUPABASE_SERVICE_ROLE_KEY` no frontend.
 - Publique apenas a chave `anon` do Supabase em `js/supabase.config.js`. Essa chave é pública por natureza e depende de RLS ativo no banco.
-- Execute a migration `supabase/migrations/20260503193000_enable_authenticated_access.sql` no Supabase SQL Editor.
+- Execute a migration `supabase/migrations/20260527100000_apply_security_policies.sql` no Supabase SQL Editor depois das migrations de schema.
 - Não execute migrations que desabilitem RLS.
 - No Supabase Auth, revise se a confirmação de e-mail deve ficar ativa para novos acessos.
 - Em produção interna, mantenha `allowSignUp: false` em `js/supabase.config.js` e crie usuários pelo painel do Supabase Auth.
-- No Supabase, mantenha RLS ativo nas tabelas `produtos`, `pessoas`, `movimentacoes` e `app_config`.
+- No Supabase, mantenha RLS ativo nas tabelas `produtos`, `pessoas`, `movimentacoes`, `app_config` e `documentos`.
+- Mantenha o bucket `documentos` privado. O app gera URLs assinadas temporárias para visualizar e baixar PDFs.
 
 ## Arquivos que não devem ir para o hosting
 
@@ -27,6 +28,7 @@ Os arquivos `.gitignore`, `.vercelignore` e `.netlifyignore` já bloqueiam esses
 - Acesso autenticado via Supabase Auth.
 - Separação de dados por `user_id`.
 - RLS por usuário autenticado.
+- Bucket privado para PDFs, com acesso por pasta `{user_id}`.
 - Botão de logout.
 - Limpeza do cache local do usuário ao sair.
 - Redução de coleta: a interface usa matrícula/ID interno em vez de CPF/CNPJ e setor/empresa em vez de endereço pessoal.

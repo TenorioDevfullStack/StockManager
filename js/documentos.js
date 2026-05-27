@@ -421,15 +421,7 @@ const Documentos = {
 
       if (uploadError) throw uploadError;
 
-      // Obter URL pública do arquivo
-      const { data: urlData } = DB.supabase.storage
-        .from("documentos")
-        .getPublicUrl(caminhoArquivo);
-
-      const arquivoUrl = urlData?.publicUrl;
-      if (!arquivoUrl) {
-        throw new Error("Não foi possível gerar a URL pública do arquivo.");
-      }
+      const arquivoUrl = caminhoArquivo;
 
       // Salvar metadados no banco de dados
       const tags = tagsStr
@@ -516,6 +508,35 @@ const Documentos = {
     return message || "falha ao salvar arquivo.";
   },
 
+  async obterUrlDocumento(doc, expiresIn = 300) {
+    const arquivoUrl = String(doc?.arquivo_url || "");
+    const caminho = doc?.arquivo_caminho || (!/^https?:\/\//i.test(arquivoUrl) ? arquivoUrl : "");
+
+    if (DB.remoteReady && DB.user && caminho) {
+      try {
+        const { data, error } = await DB.supabase.storage
+          .from("documentos")
+          .createSignedUrl(caminho, expiresIn);
+
+        if (error) throw error;
+        if (data?.signedUrl) return data.signedUrl;
+      } catch (error) {
+        console.warn("Não foi possível gerar URL assinada para o PDF.", error);
+      }
+    }
+
+    if (DB.remoteReady && caminho) {
+      const { data } = DB.supabase.storage
+        .from("documentos")
+        .getPublicUrl(caminho);
+
+      if (data?.publicUrl) return data.publicUrl;
+    }
+
+    if (/^https?:\/\//i.test(arquivoUrl)) return arquivoUrl;
+    throw new Error("Arquivo sem caminho no Storage.");
+  },
+
   async visualizar(docId) {
     const doc = this.encontrarDocumento(docId);
     if (!doc) {
@@ -570,8 +591,13 @@ const Documentos = {
       .querySelector('[data-pdf-action="download"]')
       ?.addEventListener("click", () => this.descarregar(doc.id, doc.nome));
 
-    // Carregar e renderizar PDF
-    await this.renderizarPDF(doc.arquivo_url);
+    try {
+      const arquivoUrl = await this.obterUrlDocumento(doc);
+      await this.renderizarPDF(arquivoUrl);
+    } catch (error) {
+      console.error("Erro ao gerar URL do PDF:", error);
+      UI.toast("Erro ao carregar PDF", "error");
+    }
   },
 
   paginaAtual: 1,
@@ -583,6 +609,7 @@ const Documentos = {
   async renderizarPDF(url) {
     try {
       const response = await fetch(url);
+      if (!response.ok) throw new Error("Falha ao carregar PDF.");
       const arrayBuffer = await response.arrayBuffer();
       this.pdfDocumento = await window.pdfjsLib.getDocument({
         data: arrayBuffer,
@@ -775,7 +802,9 @@ const Documentos = {
     }
 
     try {
-      const response = await fetch(doc.arquivo_url);
+      const arquivoUrl = await this.obterUrlDocumento(doc);
+      const response = await fetch(arquivoUrl);
+      if (!response.ok) throw new Error("Falha ao baixar PDF.");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -933,16 +962,8 @@ const Documentos = {
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = DB.supabase.storage
-          .from("documentos")
-          .getPublicUrl(novoCaminho);
-
-        payload.arquivo_url = urlData?.publicUrl;
+        payload.arquivo_url = novoCaminho;
         payload.arquivo_caminho = novoCaminho;
-
-        if (!payload.arquivo_url) {
-          throw new Error("Não foi possível gerar a URL pública do arquivo.");
-        }
       }
 
       const { data: docSalvo, error } = await DB.supabase
