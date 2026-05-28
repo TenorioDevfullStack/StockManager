@@ -33,29 +33,29 @@ const Dashboard = {
 
         <!-- Alertas de estoque crítico -->
         ${semEstoque > 0 || estoqueBaixo > 0 ? `
-        <div class="dash-section">
+        <div class="dash-section" style="border-left: 4px solid var(--red);">
           <div class="section-header">
-            <h2 class="section-title">🚨 Alertas de Estoque</h2>
+            <h2 class="section-title">🚨 Atenção Necessária</h2>
           </div>
           <div class="alert-list">
             ${produtos.filter(p => p.quantidade === 0).map(p => `
-              <div class="alert-item alert-danger">
-                <div class="alert-icon">❌</div>
+              <div class="alert-item alert-danger" style="border: none; background: rgba(var(--red-rgb), 0.05);">
+                <div class="alert-icon">🚫</div>
                 <div class="alert-info">
                   <strong>${App.escapeHTML(p.nome)}</strong>
-                  <span>Sem estoque (mínimo: ${App.formatNum(p.qtdMinima)} ${App.escapeHTML(p.unidade)})</span>
+                  <span>Estoque esgotado! Requer reposição imediata.</span>
                 </div>
-                <button class="btn btn-sm btn-ghost" onclick="Movimentacoes.openForm('entrada', '${p.id}')">Registrar entrada</button>
+                <button class="btn btn-sm btn-ghost" onclick="Movimentacoes.openForm('entrada', '${p.id}')">Repor</button>
               </div>
             `).join('')}
             ${produtos.filter(p => p.quantidade > 0 && p.quantidade <= p.qtdMinima).map(p => `
-              <div class="alert-item alert-warning">
+              <div class="alert-item alert-warning" style="border: none; background: rgba(var(--amber-rgb), 0.05);">
                 <div class="alert-icon">⚠️</div>
                 <div class="alert-info">
                   <strong>${App.escapeHTML(p.nome)}</strong>
-                  <span>Estoque baixo: ${App.formatNum(p.quantidade)} ${App.escapeHTML(p.unidade)} (mínimo: ${App.formatNum(p.qtdMinima)})</span>
+                  <span>Estoque baixo: ${App.formatNum(p.quantidade)} em estoque (mínimo ${App.formatNum(p.qtdMinima)}).</span>
                 </div>
-                <button class="btn btn-sm btn-ghost" onclick="Movimentacoes.openForm('entrada', '${p.id}')">Registrar entrada</button>
+                <button class="btn btn-sm btn-ghost" onclick="Movimentacoes.openForm('entrada', '${p.id}')">Adicionar</button>
               </div>
             `).join('')}
           </div>
