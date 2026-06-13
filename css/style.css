@@ -2020,3 +2020,11 @@ textarea.form-input {
     align-items: stretch;
   }
 }
+
+/* ---- Agenda ---- */
+.task-done .prod-name,
+.task-done .prod-desc,
+.task-done .date-cell {
+  text-decoration: line-through;
+  opacity: 0.55;
+}

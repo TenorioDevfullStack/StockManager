@@ -8,6 +8,7 @@ const DB = {
     pessoas: 'estoque_pessoas',
     movimentacoes: 'estoque_movimentacoes',
     documentos: 'estoque_documentos',
+    tarefas: 'estoque_tarefas',
     config: 'estoque_config',
   },
 
@@ -34,6 +35,7 @@ const DB = {
     this._remove(this.KEYS.pessoas);
     this._remove(this.KEYS.movimentacoes);
     this._remove(this.KEYS.documentos);
+    this._remove(this.KEYS.tarefas);
     this._remove(this.KEYS.config);
   },
 
@@ -292,6 +294,37 @@ const DB = {
     };
   },
 
+  _tarefaToRow(tarefa) {
+    return {
+      id: tarefa.id,
+      user_id: this.user?.id,
+      titulo: tarefa.titulo,
+      descricao: tarefa.descricao || null,
+      tipo: ['tarefa', 'evento', 'lembrete'].includes(tarefa.tipo) ? tarefa.tipo : 'tarefa',
+      prioridade: ['baixa', 'media', 'alta'].includes(tarefa.prioridade) ? tarefa.prioridade : 'media',
+      data: tarefa.data || null,
+      concluida: !!tarefa.concluida,
+      concluida_em: tarefa.concluidaEm || null,
+      criado_em: tarefa.criadoEm || new Date().toISOString(),
+      atualizado_em: tarefa.atualizadoEm || new Date().toISOString(),
+    };
+  },
+
+  _rowToTarefa(row) {
+    return {
+      id: row.id,
+      titulo: row.titulo,
+      descricao: row.descricao || '',
+      tipo: row.tipo || 'tarefa',
+      prioridade: row.prioridade || 'media',
+      data: row.data || null,
+      concluida: !!row.concluida,
+      concluidaEm: row.concluida_em || null,
+      criadoEm: row.criado_em,
+      atualizadoEm: row.atualizado_em,
+    };
+  },
+
   async _tryRemote(action, fallbackMessage = 'Falha ao sincronizar com o Supabase.') {
     if (!this.remoteReady || !this.user) return null;
     try {
@@ -324,19 +357,31 @@ const DB = {
       () => this.supabase.from('documentos').select('*').order('criado_em', { ascending: false }),
       'Não foi possível buscar documentos do Supabase.'
     );
+    const tarefas = await this._tryRemote(
+      () => this.supabase.from('tarefas').select('*').order('data', { ascending: true }),
+      'Não foi possível buscar a agenda do Supabase.'
+    );
 
-    if (Array.isArray(produtos) && (produtos.length > 0 || this.getProdutos().length === 0)) {
-      this._set(this.KEYS.produtos, produtos.map(row => this._rowToProduto(row)));
+    if (Array.isArray(produtos)) {
+      const remotos = produtos.map(row => this._rowToProduto(row));
+      this._set(this.KEYS.produtos, this._mergeById(this.getProdutos(), remotos).map(p => this._cleanProduto(p)));
     }
     if (Array.isArray(pessoas)) {
       const remotas = pessoas.map(row => this._rowToPessoa(row));
       this._set(this.KEYS.pessoas, this._mergeById(this.getPessoas(), remotas));
     }
-    if (Array.isArray(movimentacoes) && (movimentacoes.length > 0 || this.getMovimentacoes().length === 0)) {
-      this._set(this.KEYS.movimentacoes, movimentacoes.map(row => this._rowToMov(row)));
+    if (Array.isArray(movimentacoes)) {
+      const remotas = movimentacoes.map(row => this._rowToMov(row));
+      const mescladas = this._mergeById(this.getMovimentacoes(), remotas);
+      mescladas.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+      this._set(this.KEYS.movimentacoes, mescladas);
     }
     if (Array.isArray(documentos)) {
       this.setDocumentos(documentos.map(row => this._rowToDocumento(row)));
+    }
+    if (Array.isArray(tarefas)) {
+      const remotas = tarefas.map(row => this._rowToTarefa(row));
+      this._set(this.KEYS.tarefas, this._mergeById(this.getTarefas(), remotas));
     }
   },
 
@@ -363,6 +408,14 @@ const DB = {
       await this._tryRemote(
         () => this.supabase.from('movimentacoes').upsert(movimentacoes, { onConflict: 'id' }),
         'Não foi possível enviar movimentações ao Supabase.'
+      );
+    }
+
+    const tarefas = this.getTarefas().map(t => this._tarefaToRow(t));
+    if (tarefas.length) {
+      await this._tryRemote(
+        () => this.supabase.from('tarefas').upsert(tarefas, { onConflict: 'id' }),
+        'Não foi possível enviar a agenda ao Supabase.'
       );
     }
   },
@@ -457,6 +510,35 @@ const DB = {
     return mov;
   },
 
+  // ---- TAREFAS / AGENDA ----
+  getTarefas() { return this._get(this.KEYS.tarefas); },
+  getTarefa(id) { return this.getTarefas().find(t => t.id === id); },
+  saveTarefa(tarefa) {
+    const lista = this.getTarefas();
+    tarefa.atualizadoEm = new Date().toISOString();
+    if (tarefa.id) {
+      const idx = lista.findIndex(t => t.id === tarefa.id);
+      if (idx !== -1) lista[idx] = { ...lista[idx], ...tarefa };
+    } else {
+      tarefa.id = this._uuid();
+      tarefa.criadoEm = new Date().toISOString();
+      lista.push(tarefa);
+    }
+    this._set(this.KEYS.tarefas, lista);
+    this._tryRemote(
+      () => this.supabase.from('tarefas').upsert(this._tarefaToRow(tarefa), { onConflict: 'id' }),
+      'Tarefa salva localmente, mas não enviada ao Supabase.'
+    );
+    return tarefa;
+  },
+  deleteTarefa(id) {
+    this._set(this.KEYS.tarefas, this.getTarefas().filter(t => t.id !== id));
+    this._tryRemote(
+      () => this.supabase.from('tarefas').delete().eq('id', id),
+      'Tarefa excluída localmente, mas não removida do Supabase.'
+    );
+  },
+
   // ---- DOCUMENTOS ----
   getDocumentos() {
     return this._get(this.KEYS.documentos);
@@ -498,6 +580,7 @@ const DB = {
       produtos: this.getProdutos().map(p => this._cleanProduto(p)),
       pessoas: this.getPessoas(),
       movimentacoes: this.getMovimentacoes(),
+      tarefas: this.getTarefas(),
       config: this.getConfig(),
     };
   },
@@ -509,6 +592,7 @@ const DB = {
     this._set(this.KEYS.produtos, payload.produtos.map(p => this._cleanProduto(p)));
     this._set(this.KEYS.pessoas, payload.pessoas);
     this._set(this.KEYS.movimentacoes, payload.movimentacoes);
+    if (Array.isArray(payload.tarefas)) this._set(this.KEYS.tarefas, payload.tarefas);
     this._set(this.KEYS.config, payload.config || {});
     this._migrateLocalIdsToUuid();
     this.syncToSupabase();

@@ -23,6 +23,7 @@ const App = {
       render: () => Movimentacoes.render(),
     },
     pessoas: { label: "Equipe", icon: "👥", render: () => Pessoas.render() },
+    agenda: { label: "Agenda", icon: "🗓️", render: () => Agenda.render() },
     documentos: {
       label: "Documentos",
       icon: "📄",
@@ -103,6 +104,7 @@ const App = {
     await DB.syncFromSupabase();
     await DB.syncToSupabase();
     this.navigate(this.currentPage || "dashboard");
+    Agenda.notifyPending?.();
   },
 
   async signIn() {
