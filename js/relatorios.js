@@ -20,7 +20,7 @@ const Relatorios = {
           <div class="rel-filters">
             <select id="rel-cat" class="select-input">
               <option value="">Todas as categorias</option>
-              ${[...new Set(produtos.map(p => p.categoria))].map(c => `<option value="${c}">${c}</option>`).join('')}
+              ${[...new Set(produtos.map(p => p.categoria))].map(c => `<option value="${App.escapeHTML(c)}">${App.escapeHTML(c)}</option>`).join('')}
             </select>
             <select id="rel-status" class="select-input">
               <option value="">Todos os status</option>
