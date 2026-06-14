@@ -95,6 +95,7 @@ Execute as migrations SQL no Supabase SQL Editor, nesta ordem:
 8. `supabase/migrations/20260527100000_apply_security_policies.sql`
 9. `supabase/migrations/20260612090000_add_tarefas_table.sql`
 10. `supabase/migrations/20260614120000_organization_tenancy.sql`
+11. `supabase/migrations/20260614130000_soft_delete.sql`
 
 As migrations criam as tabelas:
 
@@ -108,6 +109,8 @@ As migrations criam as tabelas:
 - `tarefas`
 
 Também ativam RLS. A partir da migration `20260614120000_organization_tenancy.sql`, o isolamento de dados passa a ser por **organização (equipe)**: vários usuários compartilham o mesmo estoque. Cada usuário existente recebe automaticamente uma organização pessoal (como admin) e pode convidar outros. Veja os detalhes em [`MULTI_TENANCY.md`](MULTI_TENANCY.md).
+
+A migration `20260614130000_soft_delete.sql` adiciona **exclusão lógica** (`excluido_em`) a materiais, equipe e tarefas: ao excluir, o registro é marcado em vez de apagado, e a exclusão se propaga corretamente entre dispositivos na sincronização (evita "registros zumbis"). Os getters da aplicação e a Bot API ignoram registros excluídos.
 
 ## API para bot
 

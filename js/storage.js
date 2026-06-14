@@ -228,6 +228,7 @@ const DB = {
       descricao: p.descricao || null,
       criado_em: p.criadoEm || new Date().toISOString(),
       atualizado_em: p.atualizadoEm || new Date().toISOString(),
+      excluido_em: p.excluidoEm || null,
       user_id: this.user?.id,
       org_id: this.orgId,
     };
@@ -246,6 +247,7 @@ const DB = {
       descricao: row.descricao || '',
       criadoEm: row.criado_em,
       atualizadoEm: row.atualizado_em,
+      excluidoEm: row.excluido_em || null,
     });
   },
 
@@ -261,6 +263,7 @@ const DB = {
       obs: pessoa.obs || null,
       criado_em: pessoa.criadoEm || new Date().toISOString(),
       atualizado_em: pessoa.atualizadoEm || new Date().toISOString(),
+      excluido_em: pessoa.excluidoEm || null,
       user_id: this.user?.id,
       org_id: this.orgId,
     };
@@ -278,6 +281,7 @@ const DB = {
       obs: row.obs || '',
       criadoEm: row.criado_em,
       atualizadoEm: row.atualizado_em,
+      excluidoEm: row.excluido_em || null,
     };
   },
 
@@ -382,6 +386,7 @@ const DB = {
       concluida_em: tarefa.concluidaEm || null,
       criado_em: tarefa.criadoEm || new Date().toISOString(),
       atualizado_em: tarefa.atualizadoEm || new Date().toISOString(),
+      excluido_em: tarefa.excluidoEm || null,
     };
   },
 
@@ -397,6 +402,7 @@ const DB = {
       concluidaEm: row.concluida_em || null,
       criadoEm: row.criado_em,
       atualizadoEm: row.atualizado_em,
+      excluidoEm: row.excluido_em || null,
     };
   },
 
@@ -437,13 +443,15 @@ const DB = {
       'Não foi possível buscar a agenda do Supabase.'
     );
 
+    // O merge usa a lista CRUA (this._get), nao os getters filtrados, para
+    // preservar as "lapides" (registros com excluido_em) e propagar exclusoes.
     if (Array.isArray(produtos)) {
       const remotos = produtos.map(row => this._rowToProduto(row));
-      this._set(this.KEYS.produtos, this._mergeById(this.getProdutos(), remotos).map(p => this._cleanProduto(p)));
+      this._set(this.KEYS.produtos, this._mergeById(this._get(this.KEYS.produtos), remotos).map(p => this._cleanProduto(p)));
     }
     if (Array.isArray(pessoas)) {
       const remotas = pessoas.map(row => this._rowToPessoa(row));
-      this._set(this.KEYS.pessoas, this._mergeById(this.getPessoas(), remotas));
+      this._set(this.KEYS.pessoas, this._mergeById(this._get(this.KEYS.pessoas), remotas));
     }
     if (Array.isArray(movimentacoes)) {
       const remotas = movimentacoes.map(row => this._rowToMov(row));
@@ -456,15 +464,16 @@ const DB = {
     }
     if (Array.isArray(tarefas)) {
       const remotas = tarefas.map(row => this._rowToTarefa(row));
-      this._set(this.KEYS.tarefas, this._mergeById(this.getTarefas(), remotas));
+      this._set(this.KEYS.tarefas, this._mergeById(this._get(this.KEYS.tarefas), remotas));
     }
   },
 
   async syncToSupabase() {
     if (!this.remoteReady || !this.user) return;
 
-    const produtos = this.getProdutos().map(p => this._produtoToRow(p));
-    const pessoas = this.getPessoas().map(p => this._pessoaToRow(p));
+    // Envia a lista CRUA para que as exclusoes (excluido_em) tambem propaguem.
+    const produtos = this._get(this.KEYS.produtos).map(p => this._produtoToRow(p));
+    const pessoas = this._get(this.KEYS.pessoas).map(p => this._pessoaToRow(p));
     const movimentacoes = this.getMovimentacoes().map(m => this._movToRow(m));
 
     if (produtos.length) {
@@ -486,7 +495,7 @@ const DB = {
       );
     }
 
-    const tarefas = this.getTarefas().map(t => this._tarefaToRow(t));
+    const tarefas = this._get(this.KEYS.tarefas).map(t => this._tarefaToRow(t));
     if (tarefas.length) {
       await this._tryRemote(
         () => this.supabase.from('tarefas').upsert(tarefas, { onConflict: 'id' }),
@@ -496,9 +505,11 @@ const DB = {
   },
 
   // ---- PRODUTOS / MATERIAIS ----
-  getProdutos() { return this._get(this.KEYS.produtos).map(p => this._cleanProduto(p)); },
+  // Getter publico ignora registros excluidos (soft-delete).
+  getProdutos() { return this._get(this.KEYS.produtos).map(p => this._cleanProduto(p)).filter(p => !p.excluidoEm); },
   saveProduto(produto) {
-    const lista = this.getProdutos();
+    // Opera na lista CRUA para nao descartar as lapides (excluido_em).
+    const lista = this._get(this.KEYS.produtos).map(p => this._cleanProduto(p));
     produto = this._cleanProduto(produto);
     produto.quantidade = Math.max(0, Number(produto.quantidade) || 0);
     produto.qtdMinima = Math.max(0, Number(produto.qtdMinima) || 0);
@@ -519,20 +530,26 @@ const DB = {
     return produto;
   },
   deleteProduto(id) {
-    const lista = this.getProdutos().filter(p => p.id !== id);
-    this._set(this.KEYS.produtos, lista);
+    // Soft-delete: marca excluido_em em vez de remover, para a exclusao
+    // propagar aos outros dispositivos pela sincronizacao.
+    const lista = this._get(this.KEYS.produtos);
+    const idx = lista.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    const agora = new Date().toISOString();
+    lista[idx] = { ...lista[idx], excluidoEm: agora, atualizadoEm: agora };
+    this._set(this.KEYS.produtos, lista.map(p => this._cleanProduto(p)));
     this._set(this.KEYS.movimentacoes, this.getMovimentacoes().map(m => m.produtoId === id ? { ...m, produtoRemovido: true } : m));
     this._tryRemote(
-      () => this.supabase.from('produtos').delete().eq('id', id),
+      () => this.supabase.from('produtos').update({ excluido_em: agora, atualizado_em: agora }).eq('id', id),
       'Material excluído localmente, mas não removido do Supabase.'
     );
   },
   getProduto(id) { return this.getProdutos().find(p => p.id === id); },
 
   // ---- PESSOAS ----
-  getPessoas() { return this._get(this.KEYS.pessoas); },
+  getPessoas() { return this._get(this.KEYS.pessoas).filter(p => !p.excluidoEm); },
   savePessoa(pessoa) {
-    const lista = this.getPessoas();
+    const lista = this._get(this.KEYS.pessoas);
     pessoa.tipo = this._normalizePessoaTipo(pessoa.tipo);
     pessoa.atualizadoEm = new Date().toISOString();
     if (pessoa.id) {
@@ -551,10 +568,14 @@ const DB = {
     return pessoa;
   },
   deletePessoa(id) {
-    const lista = this.getPessoas().filter(p => p.id !== id);
+    const lista = this._get(this.KEYS.pessoas);
+    const idx = lista.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    const agora = new Date().toISOString();
+    lista[idx] = { ...lista[idx], excluidoEm: agora, atualizadoEm: agora };
     this._set(this.KEYS.pessoas, lista);
     this._tryRemote(
-      () => this.supabase.from('pessoas').delete().eq('id', id),
+      () => this.supabase.from('pessoas').update({ excluido_em: agora, atualizado_em: agora }).eq('id', id),
       'Cadastro excluído localmente, mas não removido do Supabase.'
     );
   },
@@ -595,7 +616,7 @@ const DB = {
       // retornada pela RPC (sem reenviar nada ao servidor).
       const novaQtd = Number(row?.produto_snapshot?.quantidade_atual);
       if (Number.isFinite(novaQtd)) {
-        const produtos = this.getProdutos();
+        const produtos = this._get(this.KEYS.produtos);
         const idx = produtos.findIndex(p => p.id === mov.produtoId);
         if (idx !== -1) {
           produtos[idx] = { ...produtos[idx], quantidade: novaQtd, atualizadoEm: new Date().toISOString() };
@@ -624,10 +645,10 @@ const DB = {
   },
 
   // ---- TAREFAS / AGENDA ----
-  getTarefas() { return this._get(this.KEYS.tarefas); },
+  getTarefas() { return this._get(this.KEYS.tarefas).filter(t => !t.excluidoEm); },
   getTarefa(id) { return this.getTarefas().find(t => t.id === id); },
   saveTarefa(tarefa) {
-    const lista = this.getTarefas();
+    const lista = this._get(this.KEYS.tarefas);
     tarefa.atualizadoEm = new Date().toISOString();
     if (tarefa.id) {
       const idx = lista.findIndex(t => t.id === tarefa.id);
@@ -645,9 +666,14 @@ const DB = {
     return tarefa;
   },
   deleteTarefa(id) {
-    this._set(this.KEYS.tarefas, this.getTarefas().filter(t => t.id !== id));
+    const lista = this._get(this.KEYS.tarefas);
+    const idx = lista.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    const agora = new Date().toISOString();
+    lista[idx] = { ...lista[idx], excluidoEm: agora, atualizadoEm: agora };
+    this._set(this.KEYS.tarefas, lista);
     this._tryRemote(
-      () => this.supabase.from('tarefas').delete().eq('id', id),
+      () => this.supabase.from('tarefas').update({ excluido_em: agora, atualizado_em: agora }).eq('id', id),
       'Tarefa excluída localmente, mas não removida do Supabase.'
     );
   },

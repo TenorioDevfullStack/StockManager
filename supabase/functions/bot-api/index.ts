@@ -87,6 +87,7 @@ async function handleResumo(request: Request, supabase: ReturnType<typeof create
     .from("produtos")
     .select("id,nome,sku,categoria,unidade,quantidade,qtd_minima,localizacao")
     .eq("org_id", orgId)
+    .is("excluido_em", null)
     .order("nome");
 
   if (produtosError) throwDbError(produtosError, "Nao foi possivel buscar o resumo.");
@@ -131,6 +132,7 @@ async function handleProdutos(
       .select("*")
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .maybeSingle();
 
     if (error) throwDbError(error, "Nao foi possivel buscar o material.");
@@ -148,7 +150,8 @@ async function handleProdutos(
     let query = supabase
       .from("produtos")
       .select("*", { count: "exact" })
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      .is("excluido_em", null);
 
     if (search) query = query.or(`nome.ilike.%${search}%,sku.ilike.%${search}%`);
     if (categoria) query = query.eq("categoria", categoria);
@@ -185,6 +188,7 @@ async function handleProdutos(
       .update(row)
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .select("*")
       .maybeSingle();
 
@@ -195,11 +199,14 @@ async function handleProdutos(
 
   if (request.method === "DELETE" && id) {
     ensureUuid(id, "id");
+    // Soft-delete: marca excluido_em para a exclusao propagar aos apps.
+    const agora = new Date().toISOString();
     const { data, error } = await supabase
       .from("produtos")
-      .delete()
+      .update({ excluido_em: agora, atualizado_em: agora })
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .select("id")
       .maybeSingle();
 
@@ -226,6 +233,7 @@ async function handlePessoas(
       .select("*")
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .maybeSingle();
 
     if (error) throwDbError(error, "Nao foi possivel buscar o cadastro.");
@@ -242,7 +250,8 @@ async function handlePessoas(
     let query = supabase
       .from("pessoas")
       .select("*", { count: "exact" })
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      .is("excluido_em", null);
 
     if (search) query = query.or(`nome.ilike.%${search}%,documento.ilike.%${search}%,email.ilike.%${search}%`);
     if (tipo) query = query.eq("tipo", validatePessoaTipo(tipo));
@@ -278,6 +287,7 @@ async function handlePessoas(
       .update(row)
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .select("*")
       .maybeSingle();
 
@@ -288,11 +298,14 @@ async function handlePessoas(
 
   if (request.method === "DELETE" && id) {
     ensureUuid(id, "id");
+    // Soft-delete: marca excluido_em para a exclusao propagar aos apps.
+    const agora = new Date().toISOString();
     const { data, error } = await supabase
       .from("pessoas")
-      .delete()
+      .update({ excluido_em: agora, atualizado_em: agora })
       .eq("org_id", orgId)
       .eq("id", id)
+      .is("excluido_em", null)
       .select("id")
       .maybeSingle();
 
