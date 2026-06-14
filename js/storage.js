@@ -562,11 +562,54 @@ const DB = {
 
   // ---- MOVIMENTAÇÕES ----
   getMovimentacoes() { return this._get(this.KEYS.movimentacoes); },
-  saveMovimentacao(mov) {
-    const lista = this.getMovimentacoes();
+
+  // Online: usa a RPC registrar_movimentacao, que atualiza estoque e grava a
+  // movimentacao de forma ATOMICA no servidor (sem condicao de corrida entre
+  // dispositivos/bot). Offline: cai no calculo local best-effort.
+  // Retorna a movimentacao salva, ou null em caso de erro.
+  async saveMovimentacao(mov) {
+    const quantidade = Math.max(0, Number(mov.quantidade) || 0);
+
+    if (this.remoteReady && this.user) {
+      const data = await this._tryRemote(
+        () => this.supabase.rpc('registrar_movimentacao', {
+          p_produto_id: mov.produtoId,
+          p_tipo: mov.tipo,
+          p_quantidade: quantidade,
+          p_motivo: mov.motivo || null,
+          p_responsavel: mov.funcionario || mov.responsavel || null,
+          p_pessoa_id: mov.pessoaId || null,
+        }),
+        'Nao foi possivel registrar a movimentacao no Supabase.'
+      );
+      if (!data) return null;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const salvo = this._rowToMov(row);
+
+      const listaMov = this.getMovimentacoes();
+      listaMov.unshift(salvo);
+      this._set(this.KEYS.movimentacoes, listaMov);
+
+      // Atualiza apenas o cache local do produto com a quantidade autoritativa
+      // retornada pela RPC (sem reenviar nada ao servidor).
+      const novaQtd = Number(row?.produto_snapshot?.quantidade_atual);
+      if (Number.isFinite(novaQtd)) {
+        const produtos = this.getProdutos();
+        const idx = produtos.findIndex(p => p.id === mov.produtoId);
+        if (idx !== -1) {
+          produtos[idx] = { ...produtos[idx], quantidade: novaQtd, atualizadoEm: new Date().toISOString() };
+          this._set(this.KEYS.produtos, produtos.map(p => this._cleanProduto(p)));
+        }
+      }
+      return salvo;
+    }
+
+    // ---- Fallback offline (best-effort, sujeito a divergencia ao sincronizar) ----
     mov.id = this._uuid();
     mov.data = new Date().toISOString();
-    mov.quantidade = Math.max(0, Number(mov.quantidade) || 0);
+    mov.quantidade = quantidade;
+    const lista = this.getMovimentacoes();
     lista.unshift(mov);
     this._set(this.KEYS.movimentacoes, lista);
 
@@ -577,11 +620,6 @@ const DB = {
       else if (mov.tipo === 'ajuste') prod.quantidade = Number(mov.quantidade);
       this.saveProduto(prod);
     }
-
-    this._tryRemote(
-      () => this.supabase.from('movimentacoes').upsert(this._movToRow(mov), { onConflict: 'id' }),
-      'Movimentação salva localmente, mas não enviada ao Supabase.'
-    );
     return mov;
   },
 

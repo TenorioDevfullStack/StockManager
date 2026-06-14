@@ -35,6 +35,7 @@ const Organizacao = {
     `;
 
     const membros = await DB.getMembros();
+    this._membros = membros; // cache para lookups por user_id (evita dados no HTML inline)
     this.renderTable(membros, isAdmin);
 
     const totalCard = document.querySelectorAll('.insight-card strong')[2];
@@ -61,8 +62,8 @@ const Organizacao = {
         <td class="date-cell">${App.formatDate(m.criado_em)}</td>
         ${isAdmin ? `<td>
           <div class="action-btns">
-            <button class="btn btn-sm btn-icon" title="Alterar papel" onclick="Organizacao.toggleRole('${m.user_id}', '${m.papel}', '${App.escapeHTML(m.email)}')">🔁</button>
-            ${isSelf ? '' : `<button class="btn btn-sm btn-icon" title="Remover" onclick="Organizacao.remove('${m.user_id}', '${App.escapeHTML(m.email)}')">🗑️</button>`}
+            <button class="btn btn-sm btn-icon" title="Alterar papel" onclick="Organizacao.toggleRole('${m.user_id}')">🔁</button>
+            ${isSelf ? '' : `<button class="btn btn-sm btn-icon" title="Remover" onclick="Organizacao.remove('${m.user_id}')">🗑️</button>`}
           </div>
         </td>` : ''}
       </tr>`;
@@ -111,17 +112,25 @@ const Organizacao = {
     };
   },
 
-  async toggleRole(userId, papelAtual, email) {
-    const novo = papelAtual === 'admin' ? 'membro' : 'admin';
-    const res = await DB.adicionarMembro(email, novo);
+  _findMembro(userId) {
+    return (this._membros || []).find(m => m.user_id === userId);
+  },
+
+  async toggleRole(userId) {
+    const membro = this._findMembro(userId);
+    if (!membro) return;
+    const novo = membro.papel === 'admin' ? 'membro' : 'admin';
+    const res = await DB.adicionarMembro(membro.email, novo);
     if (res) {
-      App.showToast(`${email} agora é ${novo === 'admin' ? 'administrador' : 'membro'}.`);
+      App.showToast(`${membro.email} agora é ${novo === 'admin' ? 'administrador' : 'membro'}.`);
       this.render();
     }
   },
 
-  remove(userId, email) {
-    App.confirmDelete(`Remover <strong>"${App.escapeHTML(email)}"</strong> da organização?`, async () => {
+  remove(userId) {
+    const membro = this._findMembro(userId);
+    if (!membro) return;
+    App.confirmDelete(`Remover <strong>"${App.escapeHTML(membro.email)}"</strong> da organização?`, async () => {
       const res = await DB.removerMembro(userId);
       if (res) {
         App.showToast('Membro removido.', 'info');

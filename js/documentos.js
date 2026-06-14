@@ -1305,9 +1305,14 @@ const Documentos = {
   },
 
   sanitize(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+    // Escapa < > & e tambem aspas, para ser seguro tanto em conteudo de
+    // texto quanto dentro de atributos (value="...", data-*="...").
+    return String(text ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   },
 
   jsArg(value) {
