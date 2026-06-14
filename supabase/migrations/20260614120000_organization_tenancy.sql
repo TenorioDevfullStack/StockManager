@@ -227,6 +227,9 @@ end;
 $$;
 
 -- Remove um membro. So admin; nao permite remover o ultimo admin.
+-- DROP antes do CREATE porque uma versao anterior retornava void e o Postgres
+-- nao permite trocar o tipo de retorno com create or replace.
+drop function if exists public.remover_membro(uuid, uuid);
 create or replace function public.remover_membro(p_org_id uuid, p_user_id uuid)
 returns boolean
 language plpgsql
@@ -458,6 +461,10 @@ drop policy if exists "produtos_select_own" on public.produtos;
 drop policy if exists "produtos_insert_own" on public.produtos;
 drop policy if exists "produtos_update_own" on public.produtos;
 drop policy if exists "produtos_delete_own" on public.produtos;
+drop policy if exists "produtos_select_org" on public.produtos;
+drop policy if exists "produtos_insert_org" on public.produtos;
+drop policy if exists "produtos_update_org" on public.produtos;
+drop policy if exists "produtos_delete_org" on public.produtos;
 
 create policy "produtos_select_org" on public.produtos
 for select to authenticated
@@ -481,6 +488,10 @@ drop policy if exists "pessoas_select_own" on public.pessoas;
 drop policy if exists "pessoas_insert_own" on public.pessoas;
 drop policy if exists "pessoas_update_own" on public.pessoas;
 drop policy if exists "pessoas_delete_own" on public.pessoas;
+drop policy if exists "pessoas_select_org" on public.pessoas;
+drop policy if exists "pessoas_insert_org" on public.pessoas;
+drop policy if exists "pessoas_update_org" on public.pessoas;
+drop policy if exists "pessoas_delete_org" on public.pessoas;
 
 create policy "pessoas_select_org" on public.pessoas
 for select to authenticated
@@ -504,6 +515,10 @@ drop policy if exists "movimentacoes_select_own" on public.movimentacoes;
 drop policy if exists "movimentacoes_insert_own" on public.movimentacoes;
 drop policy if exists "movimentacoes_update_own" on public.movimentacoes;
 drop policy if exists "movimentacoes_delete_own" on public.movimentacoes;
+drop policy if exists "movimentacoes_select_org" on public.movimentacoes;
+drop policy if exists "movimentacoes_insert_org" on public.movimentacoes;
+drop policy if exists "movimentacoes_update_org" on public.movimentacoes;
+drop policy if exists "movimentacoes_delete_org" on public.movimentacoes;
 
 create policy "movimentacoes_select_org" on public.movimentacoes
 for select to authenticated
@@ -537,6 +552,10 @@ drop policy if exists "documentos_select_own" on public.documentos;
 drop policy if exists "documentos_insert_own" on public.documentos;
 drop policy if exists "documentos_update_own" on public.documentos;
 drop policy if exists "documentos_delete_own" on public.documentos;
+drop policy if exists "documentos_select_org" on public.documentos;
+drop policy if exists "documentos_insert_org" on public.documentos;
+drop policy if exists "documentos_update_org" on public.documentos;
+drop policy if exists "documentos_delete_org" on public.documentos;
 
 create policy "documentos_select_org" on public.documentos
 for select to authenticated
@@ -566,6 +585,10 @@ drop policy if exists "tarefas_select_own" on public.tarefas;
 drop policy if exists "tarefas_insert_own" on public.tarefas;
 drop policy if exists "tarefas_update_own" on public.tarefas;
 drop policy if exists "tarefas_delete_own" on public.tarefas;
+drop policy if exists "tarefas_select_org" on public.tarefas;
+drop policy if exists "tarefas_insert_org" on public.tarefas;
+drop policy if exists "tarefas_update_org" on public.tarefas;
+drop policy if exists "tarefas_delete_org" on public.tarefas;
 
 create policy "tarefas_select_org" on public.tarefas
 for select to authenticated
@@ -596,6 +619,10 @@ drop policy if exists "documentos_insert_own" on storage.objects;
 drop policy if exists "documentos_select_own" on storage.objects;
 drop policy if exists "documentos_update_own" on storage.objects;
 drop policy if exists "documentos_delete_own" on storage.objects;
+drop policy if exists "documentos_insert_member" on storage.objects;
+drop policy if exists "documentos_select_member" on storage.objects;
+drop policy if exists "documentos_update_member" on storage.objects;
+drop policy if exists "documentos_delete_member" on storage.objects;
 
 create policy "documentos_insert_member"
 on storage.objects for insert
