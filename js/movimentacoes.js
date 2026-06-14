@@ -159,7 +159,12 @@ const Movimentacoes = {
         </div>
       </form>`;
 
-    App.openModal('Nova Movimentação', formHTML, () => {
+    // Mantem o modal aberto (() => false) e trata a confirmacao de forma
+    // assincrona, pois DB.saveMovimentacao agora usa a RPC atomica.
+    App.openModal('Nova Movimentação', formHTML, () => false, 'Registrar');
+
+    const confirmBtn = document.getElementById('modal-confirm');
+    confirmBtn.onclick = async () => {
       const tipo = document.querySelector('input[name="tipo"]:checked')?.value;
       const produtoId = document.getElementById('mf-produto').value;
       const quantidade = Number(document.getElementById('mf-quantidade').value);
@@ -167,20 +172,21 @@ const Movimentacoes = {
 
       if (!tipo || !produtoId || !quantidade || quantidade <= 0) {
         App.showToast('Preencha todos os campos obrigatórios.', 'error');
-        return false;
+        return;
       }
       if (tipo === 'saida' && !funcionario) {
         App.showToast('Informe o funcionário que retirou o material.', 'error');
-        return false;
+        return;
       }
 
       const prod = DB.getProduto(produtoId);
       if (tipo === 'saida' && prod && quantidade > prod.quantidade) {
         App.showToast(`Estoque insuficiente! Disponível: ${prod.quantidade} ${prod.unidade}`, 'error');
-        return false;
+        return;
       }
 
-      DB.saveMovimentacao({
+      confirmBtn.disabled = true;
+      const salvo = await DB.saveMovimentacao({
         produtoId,
         tipo,
         quantidade,
@@ -188,11 +194,13 @@ const Movimentacoes = {
         funcionario,
         responsavel: funcionario,
       });
+      confirmBtn.disabled = false;
 
+      if (!salvo) return; // erro ja exibido via toast pela RPC
       App.showToast('Movimentação registrada!');
+      App.closeModal();
       if (App.currentPage === 'movimentacoes') this.render();
-      return true;
-    }, 'Registrar');
+    };
 
     // Radio interativo
     setTimeout(() => {
