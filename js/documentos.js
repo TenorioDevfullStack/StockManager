@@ -160,7 +160,6 @@ const Documentos = {
       const { data, error } = await DB.supabase
         .from("documentos")
         .select("*")
-        .eq("user_id", DB.user.id)
         .order("criado_em", { ascending: false });
 
       if (error) throw error;
@@ -408,7 +407,8 @@ const Documentos = {
     try {
       // Gerar caminho único para o arquivo
       const timestamp = Date.now();
-      caminhoArquivo = `${DB.user.id}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+      // Pasta nomeada pela organizacao para que todos os membros acessem o arquivo.
+      caminhoArquivo = `${DB.orgId}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
       // Fazer upload para Supabase Storage
       const { error: uploadError } = await DB.supabase.storage
@@ -440,6 +440,7 @@ const Documentos = {
             arquivo_caminho: caminhoArquivo,
             tags,
             user_id: DB.user.id,
+            org_id: DB.orgId,
           },
         ])
         .select("*")
@@ -460,6 +461,7 @@ const Documentos = {
           arquivo_caminho: caminhoArquivo,
           tags,
           user_id: DB.user.id,
+          org_id: DB.orgId,
         },
       );
 
@@ -950,7 +952,7 @@ const Documentos = {
 
       if (novoArquivo) {
         const timestamp = Date.now();
-        novoCaminho = `${DB.user.id}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
+        novoCaminho = `${DB.orgId}/${this.slugArquivo(tipo)}/${timestamp}_${this.slugArquivo(nome)}.pdf`;
 
         const { error: uploadError } = await DB.supabase.storage
           .from("documentos")
@@ -970,7 +972,6 @@ const Documentos = {
         .from("documentos")
         .update(payload)
         .eq("id", docAtual.id)
-        .eq("user_id", DB.user.id)
         .select("*")
         .single();
 
@@ -1037,8 +1038,7 @@ const Documentos = {
       const { error } = await DB.supabase
         .from("documentos")
         .delete()
-        .eq("id", doc.id)
-        .eq("user_id", DB.user.id);
+        .eq("id", doc.id);
 
       if (error) throw error;
 
@@ -1276,7 +1276,6 @@ const Documentos = {
           .from("documentos")
           .update(payload)
           .eq("id", doc.id)
-          .eq("user_id", DB.user.id)
           .select("*")
           .single();
 

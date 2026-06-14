@@ -16,6 +16,9 @@ const DB = {
   remoteReady: false,
   remoteError: '',
   user: null,
+  orgId: null,
+  orgNome: '',
+  orgPapel: '',
 
   async init() {
     this._initSupabase();
@@ -28,6 +31,73 @@ const DB = {
 
   clearUser() {
     this.user = null;
+    this.orgId = null;
+    this.orgNome = '';
+    this.orgPapel = '';
+  },
+
+  // Garante que o usuario pertenca a uma organizacao e carrega
+  // org_id/nome/papel atuais. Deve rodar logo apos o login, antes
+  // de qualquer sincronizacao, pois todo registro e carimbado com org_id.
+  async ensureOrg() {
+    if (!this.remoteReady || !this.user) return null;
+
+    const orgId = await this._tryRemote(
+      () => this.supabase.rpc('garantir_organizacao'),
+      'Nao foi possivel carregar a organizacao.'
+    );
+    if (!orgId) return null;
+
+    this.orgId = orgId;
+
+    const membro = await this._tryRemote(
+      () => this.supabase
+        .from('organizacao_membros')
+        .select('papel, organizacoes(nome)')
+        .eq('org_id', orgId)
+        .eq('user_id', this.user.id)
+        .maybeSingle(),
+      'Nao foi possivel carregar os dados da organizacao.'
+    );
+    if (membro) {
+      this.orgPapel = membro.papel || '';
+      this.orgNome = membro.organizacoes?.nome || '';
+    }
+    return this.orgId;
+  },
+
+  isOrgAdmin() {
+    return this.orgPapel === 'admin';
+  },
+
+  async getMembros() {
+    if (!this.orgId) return [];
+    const membros = await this._tryRemote(
+      () => this.supabase.rpc('listar_membros', { p_org_id: this.orgId }),
+      'Nao foi possivel listar os membros.'
+    );
+    return Array.isArray(membros) ? membros : [];
+  },
+
+  adicionarMembro(email, papel = 'membro') {
+    return this._tryRemote(
+      () => this.supabase.rpc('adicionar_membro', {
+        p_org_id: this.orgId,
+        p_email: email,
+        p_papel: papel,
+      }),
+      'Nao foi possivel adicionar o membro.'
+    );
+  },
+
+  removerMembro(userId) {
+    return this._tryRemote(
+      () => this.supabase.rpc('remover_membro', {
+        p_org_id: this.orgId,
+        p_user_id: userId,
+      }),
+      'Nao foi possivel remover o membro.'
+    );
   },
 
   clearLocalData() {
@@ -159,6 +229,7 @@ const DB = {
       criado_em: p.criadoEm || new Date().toISOString(),
       atualizado_em: p.atualizadoEm || new Date().toISOString(),
       user_id: this.user?.id,
+      org_id: this.orgId,
     };
   },
 
@@ -191,6 +262,7 @@ const DB = {
       criado_em: pessoa.criadoEm || new Date().toISOString(),
       atualizado_em: pessoa.atualizadoEm || new Date().toISOString(),
       user_id: this.user?.id,
+      org_id: this.orgId,
     };
   },
 
@@ -245,6 +317,7 @@ const DB = {
       responsavel: mov.funcionario || mov.responsavel || null,
       criado_em: mov.data || new Date().toISOString(),
       user_id: this.user?.id,
+      org_id: this.orgId,
     };
   },
 
@@ -266,6 +339,7 @@ const DB = {
     return {
       id: doc.id,
       user_id: this.user?.id,
+      org_id: this.orgId,
       nome: doc.nome,
       descricao: doc.descricao || null,
       arquivo_url: doc.arquivo_url,
@@ -298,6 +372,7 @@ const DB = {
     return {
       id: tarefa.id,
       user_id: this.user?.id,
+      org_id: this.orgId,
       titulo: tarefa.titulo,
       descricao: tarefa.descricao || null,
       tipo: ['tarefa', 'evento', 'lembrete'].includes(tarefa.tipo) ? tarefa.tipo : 'tarefa',

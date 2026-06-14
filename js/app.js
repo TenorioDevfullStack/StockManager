@@ -34,6 +34,11 @@ const App = {
       icon: "📊",
       render: () => Relatorios.render(),
     },
+    organizacao: {
+      label: "Organização",
+      icon: "🏢",
+      render: () => Organizacao.render(),
+    },
   },
 
   async init() {
@@ -99,6 +104,14 @@ const App = {
       this.bindSidebarToggle();
       this.bindGlobalActions();
       this.initializedShell = true;
+    }
+
+    // Garante a organizacao (equipe) antes de sincronizar: todo registro
+    // e isolado por org_id, entao precisamos saber a qual org o usuario pertence.
+    await DB.ensureOrg();
+    if (DB.orgNome) {
+      const badge = document.getElementById("session-user");
+      if (badge) badge.textContent = `${user.email || "Conectado"} · ${DB.orgNome}`;
     }
 
     await DB.syncFromSupabase();
