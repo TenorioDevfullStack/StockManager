@@ -2028,3 +2028,23 @@ textarea.form-input {
   text-decoration: line-through;
   opacity: 0.55;
 }
+
+/* Balanço de custos */
+.report-note { color: var(--text2); font-size: 12px; line-height: 1.6; margin-bottom: 16px; }
+.report-warning { border: 1px solid var(--border); border-left: 4px solid var(--amber); padding: 12px; margin-bottom: 16px; line-height: 1.6; font-size: 12px; background: var(--surface2); }
+.rel-filters .form-group { margin-bottom: 0; }
+.summary-card small { display: block; margin-top: 8px; color: var(--text2); font-size: 11px; line-height: 1.5; }
+.insight-card strong { overflow-wrap: anywhere; }
+#mf-compra-campos[hidden] { display: none; }
+.modal-form small { display: block; color: var(--text2); line-height: 1.5; margin-top: 6px; }
+#main-wrapper, #main-content, .relatorios-grid, .relatorios-grid .dash-section { min-width: 0; }
+.rel-filters .form-group { flex: 1 1 180px; min-width: 0; }
+.relatorios-grid .btn-primary { background: var(--sidebar-primary); color: var(--primary-foreground); }
+.relatorios-grid .btn-primary:hover { color: var(--primary-foreground); }
+@media (max-width: 480px) {
+  .relatorios-grid .summary-cards { grid-template-columns: 1fr; }
+  .relatorios-grid .dash-section { padding: 16px; }
+  .relatorios-grid .section-header { flex-wrap: wrap; gap: 12px; }
+  .header-badge { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app-header { gap: 8px; }
+}

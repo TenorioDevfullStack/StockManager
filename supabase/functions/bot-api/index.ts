@@ -109,7 +109,11 @@ async function handleResumo(request: Request, supabase: ReturnType<typeof create
 
   return ok({
     total_produtos: rows.length,
-    total_itens: rows.reduce((sum, produto) => sum + Number(produto.quantidade ?? 0), 0),
+    quantidades_por_unidade: rows.reduce((totais: Record<string, number>, produto) => {
+      const unidade = String(produto.unidade || "nao_informada");
+      totais[unidade] = (totais[unidade] || 0) + Number(produto.quantidade ?? 0);
+      return totais;
+    }, {}),
     sem_estoque: semEstoque.length,
     baixo_estoque: baixoEstoque.length,
     total_movimentacoes: movimentacoesCount ?? 0,
@@ -355,9 +359,15 @@ async function handleMovimentacoes(
     const produtoId = requiredUuid(body, ["produto_id", "produtoId"], "produto_id");
     const pessoaId = optionalUuid(body, ["pessoa_id", "pessoaId"], "pessoa_id");
     const tipo = validateMovimentacaoTipo(requiredText(body, ["tipo"], "tipo"));
-    const quantidade = requiredNumber(body, ["quantidade"], "quantidade", { positive: true });
+    const quantidade = requiredNumber(body, ["quantidade"], "quantidade", { nonNegative: true });
     const motivo = optionalText(body, ["motivo"], "motivo") ?? null;
     const responsavel = optionalText(body, ["responsavel", "funcionario"], "responsavel") ?? null;
+
+    const custoUnitario = optionalNumber(body, ["custo_unitario", "custoUnitario"], "custo_unitario", { nonNegative: true });
+    const setor = optionalText(body, ["setor"], "setor") ?? null;
+    const documentoReferencia = optionalText(body, ["documento_referencia", "documentoReferencia"], "documento_referencia") ?? null;
+    const fornecedorId = optionalUuid(body, ["fornecedor_id", "fornecedorId"], "fornecedor_id");
+    const operacaoId = optionalUuid(body, ["operacao_id", "operacaoId"], "operacao_id");
 
     const { data, error } = await supabase.rpc("registrar_movimentacao_api", {
       p_org_id: orgId,
@@ -368,6 +378,11 @@ async function handleMovimentacoes(
       p_responsavel: responsavel,
       p_pessoa_id: pessoaId,
       p_user_id: userId,
+      p_custo_unitario: custoUnitario ?? null,
+      p_setor: setor,
+      p_documento_referencia: documentoReferencia,
+      p_fornecedor_id: fornecedorId,
+      p_operacao_id: operacaoId,
     });
 
     if (error) throwDbError(error, "Nao foi possivel registrar a movimentacao.");
@@ -456,11 +471,8 @@ function produtoPayload(body: Record<string, unknown>, userId: string, orgId: st
   }
 
   const quantidade = optionalNumber(body, ["quantidade"], "quantidade", { nonNegative: true });
-  if (quantidade !== undefined) {
-    if (quantidade === null) throw new ApiError(400, "invalid_field", "Campo quantidade nao pode ser nulo.");
-    row.quantidade = quantidade;
-  } else if (!partial) {
-    row.quantidade = 0;
+  if (quantidade !== undefined && (partial || quantidade !== 0)) {
+    throw new ApiError(400, "movement_required", "Altere o saldo por /movimentacoes. Novos materiais iniciam com saldo zero.");
   }
 
   const qtdMinima = optionalNumber(body, ["qtd_minima", "qtdMinima"], "qtd_minima", { nonNegative: true });

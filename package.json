@@ -1,0 +1,13 @@
+{
+  "name": "stockmanager",
+  "private": true,
+  "version": "0.2.0",
+  "scripts": {
+    "test": "node --test tests/inventario.test.cjs tests/database.test.mjs tests/bot-api.test.cjs",
+    "test:browser": "node --test tests/browser.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.12",
+    "playwright": "1.62.1"
+  }
+}
