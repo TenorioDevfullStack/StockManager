@@ -11,8 +11,8 @@ const Movimentacoes = {
     main.innerHTML = `
       <div class="insight-strip">
         ${this.metric('Registros', movs.length)}
-        ${this.metric('Entradas', App.formatNum(movs.filter(m => m.tipo === 'entrada').reduce((s, m) => s + Number(m.quantidade || 0), 0)))}
-        ${this.metric('Saídas', App.formatNum(movs.filter(m => m.tipo === 'saida').reduce((s, m) => s + Number(m.quantidade || 0), 0)))}
+        ${this.metric('Entradas registradas', movs.filter(m => m.tipo === 'entrada').length)}
+        ${this.metric('Retiradas registradas', movs.filter(m => m.tipo === 'saida').length)}
         ${this.metric('Ajustes', App.formatNum(movs.filter(m => m.tipo === 'ajuste').length))}
       </div>
       <div class="page-actions">
@@ -40,6 +40,8 @@ const Movimentacoes = {
               <th>Tipo</th>
               <th>Material</th>
               <th>Quantidade</th>
+              <th>Custo total</th>
+              <th>Setor / Referência</th>
               <th>Motivo</th>
               <th>Funcionário / Responsável</th>
             </tr>
@@ -73,7 +75,8 @@ const Movimentacoes = {
       movs = movs.filter(m => {
         const prod = DB.getProduto(m.produtoId);
         const funcionario = (m.funcionario || m.responsavel || '').toLowerCase();
-        return (prod && prod.nome.toLowerCase().includes(this.filter.search)) || funcionario.includes(this.filter.search);
+        const nome = Inventario.movimento(m).nome.toLowerCase();
+        return nome.includes(this.filter.search) || funcionario.includes(this.filter.search) || (m.setor || '').toLowerCase().includes(this.filter.search);
       });
     }
 
@@ -92,17 +95,19 @@ const Movimentacoes = {
     document.querySelector('.table-container').style.display = '';
 
     tbody.innerHTML = movs.map(m => {
-      const prod = DB.getProduto(m.produtoId);
+      const prod = Inventario.movimento(m);
       const icon = m.tipo === 'entrada' ? '▲' : m.tipo === 'saida' ? '▼' : '↕';
       return `
         <tr>
           <td class="date-cell">${App.formatDate(m.data)}</td>
           <td><span class="mov-badge mov-${m.tipo}">${icon} ${m.tipo}</span></td>
           <td>
-            <strong>${prod ? App.escapeHTML(prod.nome) : '<em>Material removido</em>'}</strong>
+            <strong>${App.escapeHTML(prod.nome)}</strong>
             ${prod ? `<div class="prod-desc">${App.escapeHTML(prod.sku || '')}</div>` : ''}
           </td>
-          <td><strong>${App.formatNum(m.quantidade)} ${prod ? App.escapeHTML(prod.unidade) : 'un'}</strong></td>
+          <td><strong>${App.formatNum(m.quantidade)} ${App.escapeHTML(prod.unidade)}</strong></td>
+          <td>${m.tipo === 'ajuste' ? '—' : Inventario.dinheiro(m.custoTotal)}</td>
+          <td>${App.escapeHTML(m.setor || '—')}<div class="prod-desc">${App.escapeHTML(m.documentoReferencia || '')}</div></td>
           <td>${App.escapeHTML(m.motivo || '—')}</td>
           <td>${App.escapeHTML(m.funcionario || m.responsavel || '—')}</td>
         </tr>`;
@@ -120,6 +125,8 @@ const Movimentacoes = {
       return;
     }
 
+    const operacaoId = DB._uuid();
+    const fornecedores = DB.getPessoas().filter(p => ['fornecedor', 'ambos'].includes(p.tipo));
     const formHTML = `
       <form id="mov-form" class="modal-form" autocomplete="off">
         <div class="form-group">
@@ -145,9 +152,30 @@ const Movimentacoes = {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label id="mf-qty-label">Quantidade *</label>
-            <input type="number" id="mf-quantidade" class="form-input" min="1" value="1" required>
+            <label for="mf-quantidade" id="mf-qty-label">Quantidade *</label>
+            <input type="number" id="mf-quantidade" class="form-input" min="0.001" step="0.001" value="1" required>
           </div>
+        </div>
+        <div id="mf-compra-campos">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="mf-custo">Custo unitário (R$)</label>
+              <input type="number" id="mf-custo" class="form-input" min="0" step="0.000001" placeholder="Não informado">
+              <small>Preço por unidade cadastrada. Inclua o frete rateado, se houver. Vazio = desconhecido; zero = gratuito.</small>
+            </div>
+            <div class="form-group">
+              <label for="mf-fornecedor">Fornecedor</label>
+              <select id="mf-fornecedor" class="form-input"><option value="">Não informado</option>
+                ${fornecedores.map(p => `<option value="${p.id}">${App.escapeHTML(p.nome)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="mf-setor">Setor / Local de aplicação</label>
+            <input id="mf-setor" class="form-input" maxlength="120" placeholder="Ex.: Primeiro subsolo"></div>
+          <div class="form-group"><label for="mf-referencia">Nota / Referência do serviço</label>
+            <input id="mf-referencia" class="form-input" maxlength="120" placeholder="Ex.: NF 1234 ou OS 42"></div>
         </div>
         <div class="form-group">
           <label id="mf-motivo-label">Motivo / Observação</label>
@@ -165,12 +193,13 @@ const Movimentacoes = {
 
     const confirmBtn = document.getElementById('modal-confirm');
     confirmBtn.onclick = async () => {
+      if (!document.getElementById('mov-form').reportValidity()) return;
       const tipo = document.querySelector('input[name="tipo"]:checked')?.value;
       const produtoId = document.getElementById('mf-produto').value;
       const quantidade = Number(document.getElementById('mf-quantidade').value);
       const funcionario = document.getElementById('mf-funcionario').value.trim();
 
-      if (!tipo || !produtoId || !quantidade || quantidade <= 0) {
+      if (!tipo || !produtoId || !Number.isFinite(quantidade) || quantidade < 0 || (tipo !== 'ajuste' && quantidade === 0)) {
         App.showToast('Preencha todos os campos obrigatórios.', 'error');
         return;
       }
@@ -185,31 +214,46 @@ const Movimentacoes = {
         return;
       }
 
+      const custo = document.getElementById('mf-custo').value;
       confirmBtn.disabled = true;
-      const salvo = await DB.saveMovimentacao({
-        produtoId,
-        tipo,
-        quantidade,
-        motivo: document.getElementById('mf-motivo').value.trim(),
-        funcionario,
-        responsavel: funcionario,
-      });
-      confirmBtn.disabled = false;
-
-      if (!salvo) return; // erro ja exibido via toast pela RPC
-      App.showToast('Movimentação registrada!');
-      App.closeModal();
-      if (App.currentPage === 'movimentacoes') this.render();
+      try {
+        const salvo = await DB.saveMovimentacao({
+          produtoId, tipo, quantidade,
+          motivo: document.getElementById('mf-motivo').value.trim(),
+          funcionario, responsavel: funcionario,
+          custoUnitario: tipo === 'entrada' && custo !== '' ? Number(custo) : null,
+          fornecedorId: document.getElementById('mf-fornecedor').value || null,
+          setor: document.getElementById('mf-setor').value.trim(),
+          documentoReferencia: document.getElementById('mf-referencia').value.trim(),
+          operacaoId,
+        });
+        if (!salvo) return;
+        App.showToast('Movimentação confirmada no servidor!');
+        App.closeModal();
+        App.navigate(App.currentPage);
+      } finally { confirmBtn.disabled = false; }
     };
 
+    document.getElementById('mov-form').addEventListener('submit', event => {
+      event.preventDefault();
+      if (!confirmBtn.disabled) confirmBtn.click();
+    });
+
     // Radio interativo
-    setTimeout(() => {
+    {
       const updateLabels = () => {
         const tipo = document.querySelector('input[name="tipo"]:checked')?.value;
         const qtyLabel = document.getElementById('mf-qty-label');
         const pessoaLabel = document.getElementById('mf-funcionario-label');
         const pessoaInput = document.getElementById('mf-funcionario');
         const motivoInput = document.getElementById('mf-motivo');
+        const entrada = tipo === 'entrada';
+        document.getElementById('mf-compra-campos').hidden = !entrada;
+        document.getElementById('mf-custo').disabled = !entrada;
+        document.getElementById('mf-fornecedor').disabled = !entrada;
+        document.getElementById('mf-quantidade').min = tipo === 'ajuste' ? '0' : '0.001';
+        motivoInput.required = tipo === 'ajuste';
+        pessoaInput.required = tipo === 'saida';
         if (tipo === 'ajuste') {
           qtyLabel.textContent = 'Nova Quantidade Total *';
           pessoaLabel.textContent = 'Responsável pelo ajuste';
@@ -235,6 +279,6 @@ const Movimentacoes = {
         });
       });
       updateLabels();
-    }, 50);
+    }
   }
 };

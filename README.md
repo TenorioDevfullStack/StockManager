@@ -6,10 +6,13 @@ Sistema interno de controle de estoque para equipes de manutenção. O projeto �
 
 - Dashboard com indicadores de estoque.
 - Cadastro de materiais com SKU, categoria, unidade, quantidade mínima e localização.
-- Controle de entradas, saídas e ajustes de estoque.
+- Controle de entradas, saídas e ajustes de estoque com histórico protegido.
+- Custo de entrada, custo médio ponderado e custo histórico de consumo.
+- Balanço por período, posição atual valorizada, CSV e impressão/PDF.
+- Saldos separados por unidade e avisos de custo não informado.
 - Cadastro de equipe e fornecedores.
 - Relatórios e histórico de movimentações.
-- Exportação e importação de backup em JSON.
+- Exportação de dados em JSON; restauração exige rotina validada no servidor.
 - Autenticação com Supabase Auth.
 - Row Level Security por usuário autenticado.
 
@@ -96,6 +99,7 @@ Execute as migrations SQL no Supabase SQL Editor, nesta ordem:
 9. `supabase/migrations/20260612090000_add_tarefas_table.sql`
 10. `supabase/migrations/20260614120000_organization_tenancy.sql`
 11. `supabase/migrations/20260614130000_soft_delete.sql`
+12. `supabase/migrations/20261026210000_inventory_costs.sql`
 
 As migrations criam as tabelas:
 
@@ -111,6 +115,12 @@ As migrations criam as tabelas:
 Também ativam RLS. A partir da migration `20260614120000_organization_tenancy.sql`, o isolamento de dados passa a ser por **organização (equipe)**: vários usuários compartilham o mesmo estoque. Cada usuário existente recebe automaticamente uma organização pessoal (como admin) e pode convidar outros. Veja os detalhes em [`MULTI_TENANCY.md`](MULTI_TENANCY.md).
 
 A migration `20260614130000_soft_delete.sql` adiciona **exclusão lógica** (`excluido_em`) a materiais, equipe e tarefas: ao excluir, o registro é marcado em vez de apagado, e a exclusão se propaga corretamente entre dispositivos na sincronização (evita "registros zumbis"). Os getters da aplicação e a Bot API ignoram registros excluídos.
+
+## Custos e balanço
+
+Veja o [guia de custos e balanço](docs/CUSTOS_BALANCO.md) para o fluxo de uso, os critérios de valorização, limitações, testes e implantação coordenada. Novos materiais iniciam zerados; toda alteração de saldo exige uma movimentação online confirmada. O saldo atual é independente do período de consumo escolhido. Custos antigos desconhecidos não são estimados.
+
+**Atualização de uma instalação existente:** aplique a migração de custos e publique a Edge Function e o frontend na mesma janela de atualização. Faça backup e confira operações antigas apenas locais antes de trocar de versão. Não publique somente o frontend sobre o banco antigo.
 
 ## API para bot
 

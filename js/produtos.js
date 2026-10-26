@@ -12,13 +12,13 @@ const Produtos = {
     main.innerHTML = `
       <div class="insight-strip">
         ${this.metric('Materiais cadastrados', produtos.length)}
-        ${this.metric('Itens em estoque', App.formatNum(produtos.reduce((s, p) => s + Number(p.quantidade || 0), 0)))}
+        ${this.metric('Saldo por unidade', Inventario.textoUnidades(produtos))}
         ${this.metric('Alertas de estoque', produtos.filter(p => App.getStockStatus(p).key !== 'ok').length)}
       </div>
       <div class="page-actions">
         <div class="search-bar">
           <span class="search-icon">🔍</span>
-          <input type="text" id="prod-search" placeholder="Buscar material, SKU..." class="search-input" value="${this.filter.search}">
+          <input type="text" id="prod-search" placeholder="Buscar material, SKU..." class="search-input" value="${App.escapeHTML(this.filter.search)}">
         </div>
         <select id="prod-cat-filter" class="select-input">
           <option value="">Todas as categorias</option>
@@ -47,6 +47,7 @@ const Produtos = {
               <th>Qtd</th>
               <th>Mín.</th>
               <th>Local</th>
+              <th>Custo médio</th>
               <th>Status</th>
               <th>Ações</th>
             </tr>
@@ -123,6 +124,7 @@ const Produtos = {
           <td><strong>${App.formatNum(p.quantidade)} ${App.escapeHTML(p.unidade)}</strong></td>
           <td>${App.formatNum(p.qtdMinima)} ${App.escapeHTML(p.unidade)}</td>
           <td>${p.localizacao ? `<span class="sku-badge">${App.escapeHTML(p.localizacao)}</span>` : '—'}</td>
+          <td>${Inventario.dinheiro(p.custoMedio)}</td>
           <td><span class="status-badge status-${status.key}">${status.label}</span></td>
           <td>
             <div class="action-btns">
@@ -172,12 +174,13 @@ const Produtos = {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Quantidade Atual *</label>
-            <input type="number" id="pf-quantidade" class="form-input" value="${prod?.quantidade ?? 0}" min="0" required>
+            <label>Saldo atual</label>
+            <input type="number" id="pf-quantidade" class="form-input" value="${prod?.quantidade ?? 0}" min="0" readonly aria-describedby="pf-saldo-ajuda">
+            <small id="pf-saldo-ajuda">Cadastre o material e registre a entrada em Movimentações. Altere o saldo somente pelo histórico.</small>
           </div>
           <div class="form-group">
             <label>Quantidade Mínima</label>
-            <input type="number" id="pf-qtdMinima" class="form-input" value="${prod?.qtdMinima ?? 5}" min="0">
+            <input type="number" id="pf-qtdMinima" class="form-input" value="${prod?.qtdMinima ?? 5}" min="0" step="0.001">
           </div>
         </div>
         <div class="form-row">
@@ -192,7 +195,14 @@ const Produtos = {
         </div>
       </form>`;
 
-    App.openModal(title, formHTML, () => {
+    App.openModal(title, formHTML, () => false);
+    const confirmBtn = document.getElementById('modal-confirm');
+    document.getElementById('prod-form').addEventListener('submit', event => {
+      event.preventDefault();
+      if (!confirmBtn.disabled) confirmBtn.click();
+    });
+    confirmBtn.onclick = async () => {
+      if (!document.getElementById('prod-form').reportValidity()) return;
       const nome = document.getElementById('pf-nome').value.trim();
       if (!nome) { App.showToast('Nome é obrigatório', 'error'); return false; }
       const sku = document.getElementById('pf-sku').value.trim();
@@ -205,17 +215,20 @@ const Produtos = {
         sku,
         categoria: document.getElementById('pf-categoria').value,
         unidade: document.getElementById('pf-unidade').value,
-        quantidade: Number(document.getElementById('pf-quantidade').value) || 0,
         qtdMinima: Number(document.getElementById('pf-qtdMinima').value) || 0,
         localizacao: document.getElementById('pf-localizacao').value.trim(),
         descricao: document.getElementById('pf-descricao').value.trim(),
       };
 
-      DB.saveProduto(data);
-      App.showToast(prod ? 'Material atualizado!' : 'Material cadastrado!');
-      this.render();
-      return true;
-    });
+      confirmBtn.disabled = true;
+      try {
+        const salvo = await DB.saveProduto(data);
+        if (!salvo) return;
+        App.showToast(prod ? 'Material atualizado!' : 'Material cadastrado! Registre a entrada para adicionar saldo.');
+        App.closeModal();
+        App.navigate(App.currentPage);
+      } finally { confirmBtn.disabled = false; }
+    };
   },
 
   openDetails(id) {
@@ -229,6 +242,7 @@ const Produtos = {
         <div><span>SKU</span><strong>${App.escapeHTML(p.sku || '—')}</strong></div>
         <div><span>Status</span><strong>${status.label}</strong></div>
         <div><span>Estoque</span><strong>${App.formatNum(p.quantidade)} ${App.escapeHTML(p.unidade)}</strong></div>
+        <div><span>Custo médio por unidade</span><strong>${Inventario.dinheiro(p.custoMedio)}</strong></div>
         <div><span>Estoque mínimo</span><strong>${App.formatNum(p.qtdMinima)} ${App.escapeHTML(p.unidade)}</strong></div>
         <div><span>Localização</span><strong>${App.escapeHTML(p.localizacao || '—')}</strong></div>
       </div>
@@ -247,10 +261,14 @@ const Produtos = {
 
   delete(id) {
     const prod = DB.getProduto(id);
+    if (prod && Number(prod.quantidade) > 0) {
+      App.showToast('Registre uma retirada ou ajuste justificado para zerar o saldo antes de excluir.', 'error');
+      return;
+    }
     App.confirmDelete(`Deseja excluir o material <strong>"${App.escapeHTML(prod?.nome)}"</strong>?`, () => {
-      DB.deleteProduto(id);
-      App.showToast('Material excluído.', 'info');
-      this.render();
+      DB.deleteProduto(id).then(ok => {
+        if (ok) { App.showToast('Material excluído.', 'info'); this.render(); }
+      });
     });
   }
 };

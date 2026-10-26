@@ -19,6 +19,7 @@ const DB = {
   orgId: null,
   orgNome: '',
   orgPapel: '',
+  inventoryLoaded: false,
 
   async init() {
     this._initSupabase();
@@ -26,11 +27,13 @@ const DB = {
 
   setUser(user) {
     this.user = user || null;
+    this.inventoryLoaded = false;
     this._migrateLocalIdsToUuid();
   },
 
   clearUser() {
     this.user = null;
+    this.inventoryLoaded = false;
     this.orgId = null;
     this.orgNome = '';
     this.orgPapel = '';
@@ -222,7 +225,6 @@ const DB = {
       sku: p.sku || null,
       categoria: p.categoria || 'Outros',
       unidade: p.unidade || 'un',
-      quantidade: Number(p.quantidade || 0),
       qtd_minima: Number(p.qtdMinima || 0),
       localizacao: p.localizacao || null,
       descricao: p.descricao || null,
@@ -242,6 +244,7 @@ const DB = {
       categoria: row.categoria || 'Outros',
       unidade: row.unidade || 'un',
       quantidade: Number(row.quantidade || 0),
+      custoMedio: Inventario.custo(row.custo_medio),
       qtdMinima: Number(row.qtd_minima || 0),
       localizacao: row.localizacao || '',
       descricao: row.descricao || '',
@@ -336,6 +339,13 @@ const DB = {
       funcionario: row.responsavel || '',
       responsavel: row.responsavel || '',
       data: row.criado_em,
+      custoUnitario: Inventario.custo(row.custo_unitario),
+      custoTotal: Inventario.custo(row.custo_total),
+      setor: row.setor || '',
+      documentoReferencia: row.documento_referencia || '',
+      fornecedorId: row.fornecedor_id || null,
+      operacaoId: row.operacao_id || null,
+      produtoSnapshot: row.produto_snapshot || {},
     };
   },
 
@@ -419,20 +429,45 @@ const DB = {
     }
   },
 
+  async _readInventoryTable(table, orgId = this.orgId) {
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await this.supabase.from(table).select('*')
+        .eq('org_id', orgId).order('id').range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      if (!Array.isArray(data)) throw new Error('Resposta de estoque inválida.');
+      rows.push(...data);
+      if (data.length < pageSize) return rows;
+    }
+  },
+
+  async refreshInventory() {
+    this.inventoryLoaded = false;
+    if (!this.remoteReady || !this.user || !this.orgId) return false;
+    const orgId = this.orgId;
+    const userId = this.user.id;
+    const data = await this._tryRemote(async () => {
+      const [produtos, movimentacoes] = await Promise.all([
+        this._readInventoryTable('produtos', orgId), this._readInventoryTable('movimentacoes', orgId),
+      ]);
+      return { data: { produtos, movimentacoes } };
+    }, 'Não foi possível atualizar o estoque. Tente novamente antes de emitir o balanço.');
+    if (!data || this.orgId !== orgId || this.user?.id !== userId) return false;
+    this._set(this.KEYS.produtos, data.produtos.map(row => this._rowToProduto(row)));
+    const movs = data.movimentacoes.map(row => this._rowToMov(row));
+    movs.sort((a, b) => new Date(b.data) - new Date(a.data));
+    this._set(this.KEYS.movimentacoes, movs);
+    this.inventoryLoaded = true;
+    return true;
+  },
+
   async syncFromSupabase() {
     if (!this.remoteReady || !this.user) return;
-
-    const produtos = await this._tryRemote(
-      () => this.supabase.from('produtos').select('*').order('nome'),
-      'Não foi possível buscar materiais do Supabase.'
-    );
+    await this.refreshInventory();
     const pessoas = await this._tryRemote(
-      () => this.supabase.from('pessoas').select('*').order('nome'),
+      () => this.supabase.from('pessoas').select('*').eq('org_id', this.orgId).order('nome'),
       'Não foi possível buscar equipe do Supabase.'
-    );
-    const movimentacoes = await this._tryRemote(
-      () => this.supabase.from('movimentacoes').select('*').order('criado_em', { ascending: false }),
-      'Não foi possível buscar movimentações do Supabase.'
     );
     const documentos = await this._tryRemote(
       () => this.supabase.from('documentos').select('*').order('criado_em', { ascending: false }),
@@ -445,19 +480,9 @@ const DB = {
 
     // O merge usa a lista CRUA (this._get), nao os getters filtrados, para
     // preservar as "lapides" (registros com excluido_em) e propagar exclusoes.
-    if (Array.isArray(produtos)) {
-      const remotos = produtos.map(row => this._rowToProduto(row));
-      this._set(this.KEYS.produtos, this._mergeById(this._get(this.KEYS.produtos), remotos).map(p => this._cleanProduto(p)));
-    }
     if (Array.isArray(pessoas)) {
       const remotas = pessoas.map(row => this._rowToPessoa(row));
       this._set(this.KEYS.pessoas, this._mergeById(this._get(this.KEYS.pessoas), remotas));
-    }
-    if (Array.isArray(movimentacoes)) {
-      const remotas = movimentacoes.map(row => this._rowToMov(row));
-      const mescladas = this._mergeById(this.getMovimentacoes(), remotas);
-      mescladas.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
-      this._set(this.KEYS.movimentacoes, mescladas);
     }
     if (Array.isArray(documentos)) {
       this.setDocumentos(documentos.map(row => this._rowToDocumento(row)));
@@ -472,29 +497,15 @@ const DB = {
     if (!this.remoteReady || !this.user) return;
 
     // Envia a lista CRUA para que as exclusoes (excluido_em) tambem propaguem.
-    const produtos = this._get(this.KEYS.produtos).map(p => this._produtoToRow(p));
+    // Estoque e histórico são autoritativos no servidor: nunca reenviar o cache.
     const pessoas = this._get(this.KEYS.pessoas).map(p => this._pessoaToRow(p));
-    const movimentacoes = this.getMovimentacoes().map(m => this._movToRow(m));
 
-    if (produtos.length) {
-      await this._tryRemote(
-        () => this.supabase.from('produtos').upsert(produtos, { onConflict: 'id' }),
-        'Não foi possível enviar materiais ao Supabase.'
-      );
-    }
     if (pessoas.length) {
       await this._tryRemote(
         () => this.supabase.from('pessoas').upsert(pessoas, { onConflict: 'id' }),
         'Não foi possível enviar equipe ao Supabase.'
       );
     }
-    if (movimentacoes.length) {
-      await this._tryRemote(
-        () => this.supabase.from('movimentacoes').upsert(movimentacoes, { onConflict: 'id' }),
-        'Não foi possível enviar movimentações ao Supabase.'
-      );
-    }
-
     const tarefas = this._get(this.KEYS.tarefas).map(t => this._tarefaToRow(t));
     if (tarefas.length) {
       await this._tryRemote(
@@ -507,42 +518,37 @@ const DB = {
   // ---- PRODUTOS / MATERIAIS ----
   // Getter publico ignora registros excluidos (soft-delete).
   getProdutos() { return this._get(this.KEYS.produtos).map(p => this._cleanProduto(p)).filter(p => !p.excluidoEm); },
-  saveProduto(produto) {
-    // Opera na lista CRUA para nao descartar as lapides (excluido_em).
-    const lista = this._get(this.KEYS.produtos).map(p => this._cleanProduto(p));
-    produto = this._cleanProduto(produto);
-    produto.quantidade = Math.max(0, Number(produto.quantidade) || 0);
-    produto.qtdMinima = Math.max(0, Number(produto.qtdMinima) || 0);
-    produto.atualizadoEm = new Date().toISOString();
-    if (produto.id) {
-      const idx = lista.findIndex(p => p.id === produto.id);
-      if (idx !== -1) lista[idx] = this._cleanProduto({ ...lista[idx], ...produto });
-    } else {
-      produto.id = this._uuid();
-      produto.criadoEm = new Date().toISOString();
-      lista.push(produto);
+  async saveProduto(produto) {
+    if (!this.remoteReady || !this.user || !this.orgId) {
+      App.showToast('Conecte-se para salvar materiais.', 'error');
+      return null;
     }
-    this._set(this.KEYS.produtos, lista);
-    this._tryRemote(
-      () => this.supabase.from('produtos').upsert(this._produtoToRow(produto), { onConflict: 'id' }),
-      'Material salvo localmente, mas não enviado ao Supabase.'
-    );
-    return produto;
+    const userId = this.user.id;
+    const orgId = this.orgId;
+    const row = this._produtoToRow({ ...produto, id: produto.id || this._uuid() });
+    const data = await this._tryRemote(() => {
+      if (produto.id) {
+        const { id, user_id, org_id, criado_em, excluido_em, ...metadata } = row;
+        return this.supabase.from('produtos').update(metadata).eq('id', id)
+          .eq('org_id', this.orgId).is('excluido_em', null).select('*').single();
+      }
+      const { excluido_em, ...novo } = row;
+      return this.supabase.from('produtos').insert(novo).select('*').single();
+    }, 'Não foi possível salvar o material.');
+    if (!data || this.user?.id !== userId || this.orgId !== orgId) return null;
+    const salvo = this._rowToProduto(data);
+    const lista = this._get(this.KEYS.produtos).filter(p => p.id !== salvo.id);
+    this._set(this.KEYS.produtos, [...lista, salvo]);
+    return salvo;
   },
-  deleteProduto(id) {
-    // Soft-delete: marca excluido_em em vez de remover, para a exclusao
-    // propagar aos outros dispositivos pela sincronizacao.
-    const lista = this._get(this.KEYS.produtos);
-    const idx = lista.findIndex(p => p.id === id);
-    if (idx === -1) return;
-    const agora = new Date().toISOString();
-    lista[idx] = { ...lista[idx], excluidoEm: agora, atualizadoEm: agora };
-    this._set(this.KEYS.produtos, lista.map(p => this._cleanProduto(p)));
-    this._set(this.KEYS.movimentacoes, this.getMovimentacoes().map(m => m.produtoId === id ? { ...m, produtoRemovido: true } : m));
-    this._tryRemote(
-      () => this.supabase.from('produtos').update({ excluido_em: agora, atualizado_em: agora }).eq('id', id),
-      'Material excluído localmente, mas não removido do Supabase.'
-    );
+  async deleteProduto(id) {
+    const data = await this._tryRemote(() => this.supabase.from('produtos')
+      .update({ excluido_em: new Date().toISOString() }).eq('id', id)
+      .eq('org_id', this.orgId).select('*').single(), 'Não foi possível excluir o material.');
+    if (!data) return false;
+    const lista = this._get(this.KEYS.produtos).filter(p => p.id !== id);
+    this._set(this.KEYS.produtos, [...lista, this._rowToProduto(data)]);
+    return true;
   },
   getProduto(id) { return this.getProdutos().find(p => p.id === id); },
 
@@ -584,64 +590,37 @@ const DB = {
   // ---- MOVIMENTAÇÕES ----
   getMovimentacoes() { return this._get(this.KEYS.movimentacoes); },
 
-  // Online: usa a RPC registrar_movimentacao, que atualiza estoque e grava a
-  // movimentacao de forma ATOMICA no servidor (sem condicao de corrida entre
-  // dispositivos/bot). Offline: cai no calculo local best-effort.
-  // Retorna a movimentacao salva, ou null em caso de erro.
+  // Custos e saldos somente são confirmados após a transação no servidor.
   async saveMovimentacao(mov) {
-    const quantidade = Math.max(0, Number(mov.quantidade) || 0);
-
-    if (this.remoteReady && this.user) {
-      const data = await this._tryRemote(
-        () => this.supabase.rpc('registrar_movimentacao', {
-          p_produto_id: mov.produtoId,
-          p_tipo: mov.tipo,
-          p_quantidade: quantidade,
-          p_motivo: mov.motivo || null,
-          p_responsavel: mov.funcionario || mov.responsavel || null,
-          p_pessoa_id: mov.pessoaId || null,
-        }),
-        'Nao foi possivel registrar a movimentacao no Supabase.'
-      );
-      if (!data) return null;
-
-      const row = Array.isArray(data) ? data[0] : data;
-      const salvo = this._rowToMov(row);
-
-      const listaMov = this.getMovimentacoes();
-      listaMov.unshift(salvo);
-      this._set(this.KEYS.movimentacoes, listaMov);
-
-      // Atualiza apenas o cache local do produto com a quantidade autoritativa
-      // retornada pela RPC (sem reenviar nada ao servidor).
-      const novaQtd = Number(row?.produto_snapshot?.quantidade_atual);
-      if (Number.isFinite(novaQtd)) {
-        const produtos = this._get(this.KEYS.produtos);
-        const idx = produtos.findIndex(p => p.id === mov.produtoId);
-        if (idx !== -1) {
-          produtos[idx] = { ...produtos[idx], quantidade: novaQtd, atualizadoEm: new Date().toISOString() };
-          this._set(this.KEYS.produtos, produtos.map(p => this._cleanProduto(p)));
-        }
-      }
-      return salvo;
+    if (!this.remoteReady || !this.user || !this.orgId) {
+      App.showToast('Conecte-se para registrar movimentações. Nenhum saldo foi alterado.', 'error');
+      return null;
     }
-
-    // ---- Fallback offline (best-effort, sujeito a divergencia ao sincronizar) ----
-    mov.id = this._uuid();
-    mov.data = new Date().toISOString();
-    mov.quantidade = quantidade;
-    const lista = this.getMovimentacoes();
-    lista.unshift(mov);
-    this._set(this.KEYS.movimentacoes, lista);
-
-    const prod = this.getProduto(mov.produtoId);
-    if (prod) {
-      if (mov.tipo === 'entrada') prod.quantidade += Number(mov.quantidade);
-      else if (mov.tipo === 'saida') prod.quantidade = Math.max(0, prod.quantidade - Number(mov.quantidade));
-      else if (mov.tipo === 'ajuste') prod.quantidade = Number(mov.quantidade);
-      this.saveProduto(prod);
+    if (mov.custoUnitario != null && (Inventario.custo(mov.custoUnitario) === null || Number(mov.custoUnitario) < 0)) {
+      App.showToast('Custo unitário inválido.', 'error');
+      return null;
     }
-    return mov;
+    const userId = this.user.id;
+    const orgId = this.orgId;
+    const data = await this._tryRemote(() => this.supabase.rpc('registrar_movimentacao_custeada', {
+      p_produto_id: mov.produtoId,
+      p_tipo: mov.tipo,
+      p_quantidade: Number(mov.quantidade),
+      p_motivo: mov.motivo || null,
+      p_responsavel: mov.funcionario || mov.responsavel || null,
+      p_pessoa_id: mov.pessoaId || null,
+      p_custo_unitario: mov.tipo === 'entrada' ? Inventario.custo(mov.custoUnitario) : null,
+      p_setor: mov.setor || null,
+      p_documento_referencia: mov.documentoReferencia || null,
+      p_fornecedor_id: mov.tipo === 'entrada' ? mov.fornecedorId || null : null,
+      p_operacao_id: mov.operacaoId || this._uuid(),
+    }), 'Não foi possível confirmar a movimentação. Verifique a conexão e a migração de custos.');
+    if (!data || this.user?.id !== userId || this.orgId !== orgId) return null;
+    const salvo = this._rowToMov(Array.isArray(data) ? data[0] : data);
+    // Uma repetição da mesma operação não duplica o histórico local.
+    this._set(this.KEYS.movimentacoes, [salvo, ...this.getMovimentacoes().filter(m => m.id !== salvo.id)]);
+    await this.refreshInventory();
+    return salvo;
   },
 
   // ---- TAREFAS / AGENDA ----
@@ -714,7 +693,7 @@ const DB = {
 
   exportData() {
     return {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       produtos: this.getProdutos().map(p => this._cleanProduto(p)),
       pessoas: this.getPessoas(),
@@ -728,12 +707,6 @@ const DB = {
     if (!payload || !Array.isArray(payload.produtos) || !Array.isArray(payload.pessoas) || !Array.isArray(payload.movimentacoes)) {
       throw new Error('Backup inválido ou incompleto.');
     }
-    this._set(this.KEYS.produtos, payload.produtos.map(p => this._cleanProduto(p)));
-    this._set(this.KEYS.pessoas, payload.pessoas);
-    this._set(this.KEYS.movimentacoes, payload.movimentacoes);
-    if (Array.isArray(payload.tarefas)) this._set(this.KEYS.tarefas, payload.tarefas);
-    this._set(this.KEYS.config, payload.config || {});
-    this._migrateLocalIdsToUuid();
-    this.syncToSupabase();
+    throw new Error('A restauração de estoque exige importação validada no servidor. O backup não foi aplicado; nenhum saldo foi alterado.');
   }
 };

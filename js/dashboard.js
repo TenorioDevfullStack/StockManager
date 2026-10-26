@@ -13,12 +13,12 @@ const Dashboard = {
     const totalPessoas = pessoas.length;
     const estoqueBaixo = produtos.filter(p => p.quantidade <= p.qtdMinima).length;
     const semEstoque = produtos.filter(p => p.quantidade === 0).length;
-    const totalItens = produtos.reduce((sum, p) => sum + Number(p.quantidade || 0), 0);
+    const saldos = Inventario.textoUnidades(produtos);
 
     // Categorias
     const catMap = {};
     produtos.forEach(p => {
-      catMap[p.categoria] = (catMap[p.categoria] || 0) + p.quantidade;
+      catMap[p.categoria] = (catMap[p.categoria] || 0) + 1;
     });
 
     main.innerHTML = `
@@ -26,7 +26,7 @@ const Dashboard = {
         <!-- Cards de resumo -->
         <div class="summary-cards">
           ${this.card('📦', 'Materiais', totalMateriais + ' cadastrados', 'indigo')}
-          ${this.card('⊞', 'Itens em Estoque', App.formatNum(totalItens), 'green')}
+          ${this.card('⊞', 'Saldo por unidade', saldos, 'green')}
           ${this.card('👥', 'Equipe', totalPessoas + ' cadastrados', 'blue')}
           ${this.card('⚠️', 'Alertas', estoqueBaixo + ' material(is)', estoqueBaixo > 0 ? 'amber' : 'green')}
         </div>
@@ -53,7 +53,7 @@ const Dashboard = {
                 <div class="alert-icon">⚠️</div>
                 <div class="alert-info">
                   <strong>${App.escapeHTML(p.nome)}</strong>
-                  <span>Estoque baixo: ${App.formatNum(p.quantidade)} em estoque (mínimo ${App.formatNum(p.qtdMinima)}).</span>
+                  <span>Estoque baixo: ${App.formatNum(p.quantidade)} ${App.escapeHTML(p.unidade)} em estoque (mínimo ${App.formatNum(p.qtdMinima)} ${App.escapeHTML(p.unidade)}).</span>
                 </div>
                 <button class="btn btn-sm btn-ghost" onclick="Movimentacoes.openForm('entrada', '${p.id}')">Adicionar</button>
               </div>
@@ -65,7 +65,7 @@ const Dashboard = {
           <!-- Gráfico de categorias -->
           <div class="dash-section">
             <div class="section-header">
-              <h2 class="section-title">📊 Estoque por Categoria</h2>
+              <h2 class="section-title">📊 Materiais cadastrados por categoria</h2>
             </div>
             <div class="bar-chart">
               ${this.buildBarChart(catMap)}

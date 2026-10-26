@@ -19,7 +19,7 @@ supabase db push
 Ou execute manualmente no SQL Editor:
 
 ```text
-supabase/migrations/20260525090000_bot_api_access.sql
+supabase/migrations/20261026210000_inventory_costs.sql (depois de todas as migrations anteriores)
 ```
 
 2. Configure os secrets da funcao:
@@ -76,7 +76,7 @@ GET /health
 GET /resumo
 ```
 
-Retorna totais de materiais, itens, movimentacoes e alertas de estoque baixo/sem estoque.
+Retorna totais de materiais, movimentações e alertas de estoque baixo/sem estoque. O campo `quantidades_por_unidade` substitui `total_itens` para não somar metros, litros e peças.
 
 ### Materiais
 
@@ -96,12 +96,14 @@ Corpo para criar material:
   "sku": "LED-12W",
   "categoria": "Eletrica",
   "unidade": "un",
-  "quantidade": 10,
+  "quantidade": 0,
   "qtd_minima": 3,
   "localizacao": "Prateleira A1",
   "descricao": "Lampada branca fria"
 }
 ```
+
+Novos materiais começam com saldo zero. Use `/movimentacoes` para registrar entradas; `PATCH /produtos/:id` não aceita `quantidade`.
 
 ### Pessoas
 
@@ -134,7 +136,11 @@ Corpo para registrar entrada, saida ou ajuste:
 }
 ```
 
-O endpoint usa uma RPC atomica, atualizando o estoque e criando o historico na mesma operacao.
+O endpoint usa uma RPC atômica, atualizando saldo, custo médio e histórico na mesma operação. `ajuste` aceita zero e exige motivo; `saida` exige responsável.
+
+Campos opcionais: `custo_unitario` (somente entrada; vazio = desconhecido, zero = gratuito), `setor`, `documento_referencia`, `fornecedor_id` e `operacao_id` (UUID de idempotência). Preserve `operacao_id` e os mesmos dados ao repetir uma chamada após falha de conexão. Fornecedor e usuário precisam pertencer à organização configurada. As respostas incluem `custo_unitario`, `custo_total` e `produto_snapshot`.
+
+A atualização deve acompanhar o frontend e a migração de custos. Veja [implantação e regras](docs/CUSTOS_BALANCO.md).
 
 ### Documentos
 

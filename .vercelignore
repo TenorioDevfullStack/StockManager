@@ -4,3 +4,5 @@
 supabase/
 *.log
 
+node_modules/
+tests/
